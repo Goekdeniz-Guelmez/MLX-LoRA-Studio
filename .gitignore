@@ -1,0 +1,8 @@
+.build/
+dist/
+Runs/
+vendor/
+.DS_Store
+*.xcuserstate
+.claude/
+.vscode/
