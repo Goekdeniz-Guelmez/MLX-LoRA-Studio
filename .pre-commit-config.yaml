@@ -1,13 +1,11 @@
 repos:
-  - repo: https://github.com/pre-commit/pre-commit-hooks
-    rev: v4.6.0
+-   repo: https://github.com/psf/black-pre-commit-mirror
+    rev: 25.1.0
     hooks:
-      - id: check-added-large-files
-        exclude: '^(Sources/Media/.*)$'
-      - id: check-ast
-      - id: check-merge-conflict
-      - id: check-yaml
-      - id: end-of-file-fixer
-        exclude: '^(Sources/Media/.*)$'
-      - id: trailing-whitespace
-        exclude: '^(Sources/Media/.*)$'
+    -   id: black
+-   repo: https://github.com/pycqa/isort
+    rev: 6.0.0
+    hooks:
+    -   id: isort
+        args:
+            - --profile=black
