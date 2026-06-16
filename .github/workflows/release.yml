@@ -1,0 +1,183 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Release version (overrides the version file when set)"
+        required: false
+        type: string
+        default: ""
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Build .app and .dmg
+    runs-on: macos-14
+    timeout-minutes: 60
+    outputs:
+      version: ${{ steps.version.outputs.VERSION }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Show toolchain
+        run: |
+          sw_vers
+          xcode-select -p || true
+          swift --version
+          xcrun --find swiftc
+
+      - name: Show effective version
+        id: version
+        run: |
+          if [[ -n "${{ inputs.version }}" ]]; then
+            VERSION="${{ inputs.version }}"
+          else
+            VERSION="$(tr -d '[:space:]' < version)"
+          fi
+          VERSION="${VERSION#v}"   # strip a leading v if the tag had one
+          echo "VERSION=$VERSION"  >> "$GITHUB_OUTPUT"
+          echo "Resolved version: $VERSION"
+
+      - name: Validate version
+        run: |
+          VERSION="${{ steps.version.outputs.VERSION }}"
+          if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+([-+].*)?$ ]]; then
+            echo "::error::Version '$VERSION' is not a valid semver string."
+            exit 1
+          fi
+
+      - name: Stamp version into the repo-root version file
+        run: |
+          VERSION="${{ steps.version.outputs.VERSION }}"
+          echo "$VERSION" > version
+          cat version
+
+      - name: Free up disk space
+        # Keep the active Xcode toolchain in place because this workflow compiles a SwiftUI macOS app, but remove simulator caches we don't need.
+        run: |
+          df -h /
+          sudo rm -rf /Library/Developer/CoreSimulator/Cryptex 2>/dev/null || true
+          rm -rf ~/Library/Developer/Xcode/DerivedData 2>/dev/null || true
+          df -h /
+
+      - name: Build the .app bundle
+        run: |
+          set -euxo pipefail
+          ./script/build_and_run.sh --package
+
+      - name: Verify .dmg exists
+        run: |
+          VERSION="${{ steps.version.outputs.VERSION }}"
+          DMG="dist/MLX-LoRA-Studio-${VERSION}.dmg"
+          if [[ ! -f "$DMG" ]]; then
+            echo "::error::Expected DMG not found: $DMG"
+            ls -la dist
+            exit 1
+          fi
+          echo "Found $DMG"
+          ls -la dist
+          file "$DMG"
+
+      - name: Verify .app exists
+        run: |
+          APP="dist/MLX LoRA Studio.app"
+          if [[ ! -d "$APP" ]]; then
+            echo "::error::Expected .app not found: $APP"
+            exit 1
+          fi
+          /usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" \
+            "$APP/Contents/Info.plist" || true
+
+      - name: Zip the .app bundle
+        # The .app is a directory, so we wrap it in a .zip so the
+        # release asset has a proper file extension. `ditto` preserves
+        # resource forks and is the canonical macOS zip tool.
+        run: |
+          cd dist
+          ditto -c -k --sequesterRsrc --keepParent \
+            "MLX LoRA Studio.app" \
+            "MLX-LoRA-Studio-${{ steps.version.outputs.VERSION }}.app.zip"
+          ls -la
+
+      - name: Compute SHA-256 of the DMG
+        run: |
+          cd dist
+          DMG="MLX-LoRA-Studio-${{ steps.version.outputs.VERSION }}.dmg"
+          shasum -a 256 "$DMG" | tee "$DMG.sha256"
+          echo "DMG size:"
+          du -h "$DMG"
+          echo "App zip size:"
+          du -h "MLX-LoRA-Studio-${{ steps.version.outputs.VERSION }}.app.zip"
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: MLX-LoRA-Studio-${{ steps.version.outputs.VERSION }}
+          path: |
+            dist/MLX-LoRA-Studio-${{ steps.version.outputs.VERSION }}.dmg
+            dist/MLX-LoRA-Studio-${{ steps.version.outputs.VERSION }}.dmg.sha256
+            dist/MLX-LoRA-Studio-${{ steps.version.outputs.VERSION }}.app.zip
+          if-no-files-found: error
+          retention-days: 14
+
+  release:
+    name: Draft GitHub Release
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: MLX-LoRA-Studio-${{ needs.build.outputs.version }}
+          path: dist
+
+      - name: Show downloaded artifacts
+        run: |
+          ls -la dist
+          echo "----- DMG manifest -----"
+          cat dist/MLX-LoRA-Studio-${{ needs.build.outputs.version }}.dmg.sha256
+
+      - name: Resolve release tag
+        id: tag
+        # When triggered by a v* tag push, use the pushed tag verbatim. When triggered manually, derive a v-prefixed tag from the version file (or the workflow_dispatch input).
+        run: |
+          if [[ "${GITHUB_REF_TYPE}" == "tag" ]]; then
+            TAG="${GITHUB_REF_NAME}"
+          else
+            TAG="v${{ needs.build.outputs.version }}"
+          fi
+          echo "TAG=$TAG" >> "$GITHUB_OUTPUT"
+          echo "Using tag: $TAG"
+
+      - name: Create official release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.tag.outputs.TAG }}
+          name: "MLX LoRA Studio ${{ needs.build.outputs.version }}"
+          draft: false
+          prerelease: false
+          generate_release_notes: false
+          files: |
+            dist/MLX-LoRA-Studio-${{ needs.build.outputs.version }}.dmg
+            dist/MLX-LoRA-Studio-${{ needs.build.outputs.version }}.app.zip
