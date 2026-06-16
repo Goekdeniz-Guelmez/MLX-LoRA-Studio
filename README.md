@@ -159,6 +159,12 @@ exists to make that loop feel like using a normal Mac app:**
 5. On first launch, allow the bundled Python helper to be opened in **System Settings →
    Privacy & Security** (Gatekeeper).
 
+<p style="color: red;"><strong>If macOS says the app is damaged or cannot be opened, run this command once:</strong></p>
+
+```bash
+sudo xattr -dr com.apple.quarantine "/Applications/MLX LoRA Studio.app"
+```
+
 The first time you start a run, Studio will **discover or provision** a Python environment
 with the right dependencies — no terminal needed.
 
@@ -559,4 +565,3 @@ under the same project.
   that `mlx-lm-lora` builds on.
 - [Hugging Face](https://huggingface.co) — model + dataset hub; the entire
   community-trained ecosystem this app is a window into.
-
