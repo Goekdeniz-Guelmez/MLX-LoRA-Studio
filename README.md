@@ -41,6 +41,7 @@
 - [Packaging a release (.app + .dmg)](#packaging-a-release-app--dmg)
 - [Project layout](#project-layout)
 - [Contributing](#contributing)
+- [Star History](#star-history)
 - [License](#license)
 - [Acknowledgments](#acknowledgments)
 
@@ -546,6 +547,18 @@ Bug reports, feature requests, and PRs are very welcome.
   smoke-test the bundle, and open a PR.
 
 For larger changes, please open an issue first to align on direction.
+
+---
+
+## Star History
+
+<a href="https://star-history.com/#Goekdeniz-Guelmez/MLX-LoRA-Studio&Date">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=Goekdeniz-Guelmez/MLX-LoRA-Studio&type=Date&theme=dark" />
+    <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=Goekdeniz-Guelmez/MLX-LoRA-Studio&type=Date" />
+    <img alt="Star History Chart" src="https://api.star-history.com/svg?repos=Goekdeniz-Guelmez/MLX-LoRA-Studio&type=Date" />
+  </picture>
+</a>
 
 ---
 
