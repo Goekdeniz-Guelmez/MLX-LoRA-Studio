@@ -16,7 +16,6 @@ import mlx.optimizers as optim
 import numpy as np
 from mlx_lm.tuner.callbacks import TrainingCallback, WandBCallback
 from mlx_lm.tuner.utils import build_schedule, load_adapters, print_trainable_parameters
-
 from mlx_lm_lora.train import (
     CONFIG_DEFAULTS,
     build_lora_config,
@@ -34,7 +33,10 @@ from mlx_lm_lora.trainer.grpo_reward_functions import (
     list_available_reward_functions,
 )
 from mlx_lm_lora.trainer.grpo_trainer import GRPOTrainingArgs, train_grpo
-from mlx_lm_lora.trainer.online_dpo_trainer import OnlineDPOTrainingArgs, train_online_dpo
+from mlx_lm_lora.trainer.online_dpo_trainer import (
+    OnlineDPOTrainingArgs,
+    train_online_dpo,
+)
 from mlx_lm_lora.trainer.orpo_trainer import ORPOTrainingArgs, train_orpo
 from mlx_lm_lora.trainer.ppo_trainer import PPOTrainingArgs, train_ppo
 from mlx_lm_lora.trainer.rlhf_reinforce_trainer import (
@@ -49,7 +51,6 @@ from mlx_lm_lora.utils import (
     save_pretrained_merged_vision,
     save_to_lmstudio_merged,
 )
-
 
 REFERENCE_MODES = {"dpo", "grpo", "online_dpo", "ppo", "rlhf_reinforce", "xpo"}
 JUDGE_MODES = {"online_dpo", "ppo", "rlhf_reinforce", "xpo"}
@@ -72,7 +73,9 @@ class ResourceGuard:
     """Abort before a training run consumes unsafe unified-memory headroom."""
 
     def __init__(self) -> None:
-        self.enabled = os.environ.get("MLX_LORA_STUDIO_RESOURCE_GUARD", "1").lower() not in {
+        self.enabled = os.environ.get(
+            "MLX_LORA_STUDIO_RESOURCE_GUARD", "1"
+        ).lower() not in {
             "0",
             "false",
             "no",
@@ -311,7 +314,9 @@ def _normalize_spec(spec: dict[str, Any]) -> SimpleNamespace:
         "gradient_accumulation_steps",
     )
     args["max_seq_length"] = _positive_int(args.get("max_seq_length"), "max_seq_length")
-    args["steps_per_report"] = _positive_int(args.get("steps_per_report"), "steps_per_report")
+    args["steps_per_report"] = _positive_int(
+        args.get("steps_per_report"), "steps_per_report"
+    )
     args["steps_per_eval"] = _positive_int(args.get("steps_per_eval"), "steps_per_eval")
     args["save_every"] = _positive_int(args.get("save_every"), "save_every")
     args["val_batches"] = _non_negative_int(args.get("val_batches"), "val_batches")
@@ -354,7 +359,9 @@ def _optimizer(args: SimpleNamespace):
     optimizer_name = args.optimizer.lower()
     if optimizer_name not in OPTIMIZER_CLASSES:
         supported = ", ".join(sorted(OPTIMIZER_CLASSES))
-        raise ValueError(f"Unsupported optimizer '{args.optimizer}'. Choose one of: {supported}.")
+        raise ValueError(
+            f"Unsupported optimizer '{args.optimizer}'. Choose one of: {supported}."
+        )
     lr = build_schedule(args.lr_schedule) if args.lr_schedule else args.learning_rate
     opt_class = OPTIMIZER_CLASSES[optimizer_name]
     opt_config = args.optimizer_config.get(optimizer_name, {})
@@ -367,7 +374,9 @@ def _resolve_lr_schedule(args: SimpleNamespace) -> None:
     schedule = dict(args.lr_schedule)
     arguments = list(schedule.get("arguments", []))
     if len(arguments) < 2:
-        raise ValueError("lr_schedule.arguments must include at least initial LR and decay steps.")
+        raise ValueError(
+            "lr_schedule.arguments must include at least initial LR and decay steps."
+        )
 
     decay_steps = arguments[1]
     if isinstance(decay_steps, dict) and "iters_fraction" in decay_steps:
@@ -424,7 +433,19 @@ def _qat_kwargs(args: SimpleNamespace) -> dict[str, Any]:
     }
 
 
-def run_sft(args, model, _tokenizer, _ref_model, _judge_model, _judge_tokenizer, opt, train_set, valid_set, adapter_file, callback):
+def run_sft(
+    args,
+    model,
+    _tokenizer,
+    _ref_model,
+    _judge_model,
+    _judge_tokenizer,
+    opt,
+    train_set,
+    valid_set,
+    adapter_file,
+    callback,
+):
     train_sft(
         model=model,
         args=SFTTrainingArgs(
@@ -439,7 +460,19 @@ def run_sft(args, model, _tokenizer, _ref_model, _judge_model, _judge_tokenizer,
     )
 
 
-def run_dpo(args, model, _tokenizer, ref_model, _judge_model, _judge_tokenizer, opt, train_set, valid_set, adapter_file, callback):
+def run_dpo(
+    args,
+    model,
+    _tokenizer,
+    ref_model,
+    _judge_model,
+    _judge_tokenizer,
+    opt,
+    train_set,
+    valid_set,
+    adapter_file,
+    callback,
+):
     train_dpo(
         model=model,
         ref_model=ref_model,
@@ -459,7 +492,19 @@ def run_dpo(args, model, _tokenizer, ref_model, _judge_model, _judge_tokenizer, 
     )
 
 
-def run_cpo(args, model, _tokenizer, _ref_model, _judge_model, _judge_tokenizer, opt, train_set, valid_set, adapter_file, callback):
+def run_cpo(
+    args,
+    model,
+    _tokenizer,
+    _ref_model,
+    _judge_model,
+    _judge_tokenizer,
+    opt,
+    train_set,
+    valid_set,
+    adapter_file,
+    callback,
+):
     train_cpo(
         model=model,
         optimizer=opt,
@@ -478,7 +523,19 @@ def run_cpo(args, model, _tokenizer, _ref_model, _judge_model, _judge_tokenizer,
     )
 
 
-def run_orpo(args, model, _tokenizer, _ref_model, _judge_model, _judge_tokenizer, opt, train_set, valid_set, adapter_file, callback):
+def run_orpo(
+    args,
+    model,
+    _tokenizer,
+    _ref_model,
+    _judge_model,
+    _judge_tokenizer,
+    opt,
+    train_set,
+    valid_set,
+    adapter_file,
+    callback,
+):
     train_orpo(
         model=model,
         optimizer=opt,
@@ -495,19 +552,35 @@ def run_orpo(args, model, _tokenizer, _ref_model, _judge_model, _judge_tokenizer
     )
 
 
-def run_grpo(args, model, tokenizer, ref_model, _judge_model, _judge_tokenizer, opt, train_set, valid_set, adapter_file, callback):
+def run_grpo(
+    args,
+    model,
+    tokenizer,
+    ref_model,
+    _judge_model,
+    _judge_tokenizer,
+    opt,
+    train_set,
+    valid_set,
+    adapter_file,
+    callback,
+):
     if args.reward_functions_file:
         load_reward_functions_from_file(args.reward_functions_file)
 
     reward_funcs = get_default_reward_functions()
     if args.reward_functions:
-        names = [name.strip() for name in args.reward_functions.split(",") if name.strip()]
+        names = [
+            name.strip() for name in args.reward_functions.split(",") if name.strip()
+        ]
         try:
             reward_funcs = [get_reward_function(name) for name in names]
             studio_log(f"Using reward functions: {', '.join(names)}")
         except KeyError as exc:
             studio_log(str(exc))
-            studio_log(f"Available reward functions: {list_available_reward_functions()}")
+            studio_log(
+                f"Available reward functions: {list_available_reward_functions()}"
+            )
             raise
 
     train_grpo(
@@ -543,7 +616,19 @@ def run_grpo(args, model, tokenizer, ref_model, _judge_model, _judge_tokenizer, 
     )
 
 
-def run_online_family(args, model, tokenizer, ref_model, judge_model, judge_tokenizer, opt, train_set, valid_set, adapter_file, callback):
+def run_online_family(
+    args,
+    model,
+    tokenizer,
+    ref_model,
+    judge_model,
+    judge_tokenizer,
+    opt,
+    train_set,
+    valid_set,
+    adapter_file,
+    callback,
+):
     func, arg_type = {
         "online_dpo": (train_online_dpo, OnlineDPOTrainingArgs),
         "ppo": (train_ppo, PPOTrainingArgs),
@@ -643,7 +728,9 @@ def run(args: SimpleNamespace) -> None:
         guard.release_caches()
         guard.check("loading the trainable model")
 
-        reference_model = load_reference_model(args) if args.train_mode in REFERENCE_MODES else None
+        reference_model = (
+            load_reference_model(args) if args.train_mode in REFERENCE_MODES else None
+        )
         guard.release_caches()
         guard.check("loading the reference model")
         judge_model, judge_tokenizer = (
@@ -706,7 +793,9 @@ def run(args: SimpleNamespace) -> None:
 
     if args.fuse:
         if args.model_family == "vision_language":
-            output_path = args.vlm_output_path or str(Path(args.adapter_path) / "full-vlm")
+            output_path = args.vlm_output_path or str(
+                Path(args.adapter_path) / "full-vlm"
+            )
             studio_log(f"Exporting full VLM to {output_path}")
             with quiet_vendor_output():
                 save_pretrained_merged_vision(
@@ -737,8 +826,12 @@ def run(args: SimpleNamespace) -> None:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="MLX LoRA Studio custom training runner.")
-    parser.add_argument("--spec", required=True, help="Path to the Studio JSON run spec.")
+    parser = argparse.ArgumentParser(
+        description="MLX LoRA Studio custom training runner."
+    )
+    parser.add_argument(
+        "--spec", required=True, help="Path to the Studio JSON run spec."
+    )
     parsed = parser.parse_args()
     with open(parsed.spec, "r", encoding="utf-8") as handle:
         spec = json.load(handle)
