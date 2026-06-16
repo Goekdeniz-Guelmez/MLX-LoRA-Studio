@@ -9,3 +9,4 @@ vendor/
 __pycache__/
 *.pyc
 *.pyo
+.conda/

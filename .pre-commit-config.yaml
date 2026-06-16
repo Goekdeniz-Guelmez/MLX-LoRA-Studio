@@ -3,11 +3,11 @@ repos:
     rev: v4.6.0
     hooks:
       - id: check-added-large-files
-        exclude: '^(MLX-LoRA-Studio-Beta-21\.0\.dmg|Sources/Media/.*)$'
+        exclude: '^(Sources/Media/.*)$'
       - id: check-ast
       - id: check-merge-conflict
       - id: check-yaml
       - id: end-of-file-fixer
-        exclude: '^(MLX-LoRA-Studio-Beta-21\.0\.dmg|Sources/Media/.*)$'
+        exclude: '^(Sources/Media/.*)$'
       - id: trailing-whitespace
-        exclude: '^(MLX-LoRA-Studio-Beta-21\.0\.dmg|Sources/Media/.*)$'
+        exclude: '^(Sources/Media/.*)$'
