@@ -1,0 +1,13 @@
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.6.0
+    hooks:
+      - id: check-added-large-files
+        exclude: '^(MLX-LoRA-Studio-Beta-21\.0\.dmg|Sources/Media/.*)$'
+      - id: check-ast
+      - id: check-merge-conflict
+      - id: check-yaml
+      - id: end-of-file-fixer
+        exclude: '^(MLX-LoRA-Studio-Beta-21\.0\.dmg|Sources/Media/.*)$'
+      - id: trailing-whitespace
+        exclude: '^(MLX-LoRA-Studio-Beta-21\.0\.dmg|Sources/Media/.*)$'
