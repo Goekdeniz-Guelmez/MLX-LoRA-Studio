@@ -6,3 +6,7 @@ vendor/
 *.xcuserstate
 .claude/
 .vscode/
+__pycache__/
+*.pyc
+*.pyo
+.conda/
