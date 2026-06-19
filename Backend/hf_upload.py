@@ -4,6 +4,7 @@ import argparse
 import json
 import math
 import os
+import re
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
@@ -17,6 +18,9 @@ SPARK_GLYPHS = "▁▂▃▄▅▆▇█"
 SPARK_WIDTH = 40
 
 LOSS_CURVE_IMAGE_NAME = "loss_curve.png"
+HF_ID_PART_RE = re.compile(
+    r"^[A-Za-z0-9][A-Za-z0-9._-]{0,94}[A-Za-z0-9]$|^[A-Za-z0-9]$"
+)
 
 
 def studio_log(message: str) -> None:
@@ -450,6 +454,29 @@ def _yaml_list(values: list[str]) -> list[str]:
     return [f"- {_yaml_quote(value)}" for value in cleaned]
 
 
+def _is_hf_card_id(value: Any) -> bool:
+    text = clean_string(value)
+    if (
+        not text
+        or text.startswith(("/", "~", "."))
+        or "\\" in text
+        or ":" in text
+        or text.endswith("/")
+        or "//" in text
+        or ".." in text
+    ):
+        return False
+    parts = text.split("/")
+    if len(parts) > 2:
+        return False
+    return all(HF_ID_PART_RE.fullmatch(part) is not None for part in parts)
+
+
+def _metadata_id(value: Any) -> str:
+    text = clean_string(value)
+    return text if _is_hf_card_id(text) else ""
+
+
 def _metadata_tags(kind: str, spec: dict[str, Any] | None) -> list[str]:
     tags = ["mlx", "mlx-lm-lora", "mlx-lora-studio"]
     if kind == "model":
@@ -491,8 +518,8 @@ def render_hf_metadata_block(kind: str, spec: dict[str, Any] | None = None) -> s
             *_yaml_list(tags),
         ]
         if spec is not None:
-            base_model = clean_string(spec.get("model"))
-            dataset = clean_string(spec.get("data"))
+            base_model = _metadata_id(spec.get("model"))
+            dataset = _metadata_id(spec.get("data"))
             if base_model:
                 lines += ["base_model:", *_yaml_list([base_model])]
             if dataset:
@@ -1078,15 +1105,15 @@ def run(spec: dict[str, Any]) -> None:
     commit_message = (
         clean_string(spec.get("commit_message")) or "Upload from MLX LoRA Studio"
     )
-    upload_model = upload_target in {"model", "all"}
-    upload_dataset = upload_target in {"dataset", "all"} and (
-        upload_target == "dataset" or bool(spec.get("upload_synthetic_dataset"))
-    )
-
     if upload_target not in {"model", "dataset", "all"}:
         raise ValueError(f"Unsupported upload target: {upload_target}")
     if upload_kind not in {"adaptersOnly", "mergedWeights"}:
         raise ValueError(f"Unsupported model upload kind: {upload_kind}")
+
+    upload_model = upload_target == "model" or upload_target == "all"
+    upload_dataset = upload_target == "dataset" or (
+        upload_target == "all" and bool(spec.get("upload_synthetic_dataset"))
+    )
     if not upload_model and not upload_dataset:
         raise ValueError("Nothing selected to upload.")
 
