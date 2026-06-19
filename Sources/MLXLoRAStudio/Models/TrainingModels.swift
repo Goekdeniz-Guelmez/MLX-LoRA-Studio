@@ -215,15 +215,15 @@ enum OptimizerKind: String, CaseIterable, Identifiable {
 
     var title: String {
         switch self {
-        // case .sgd: "SGD"
-        // case .rmsprop: "RMSprop"
-        // case .adagrad: "Adagrad"
-        // case .adadelta: "AdaDelta"
+        case .sgd: "SGD"
+        case .rmsprop: "RMSprop"
+        case .adagrad: "Adagrad"
+        case .adadelta: "AdaDelta"
         case .adam: "Adam"
         case .adamw: "AdamW"
-        // case .adamax: "Adamax"
-        // case .lion: "Lion"
-        // case .adafactor: "Adafactor"
+        case .adamax: "Adamax"
+        case .lion: "Lion"
+        case .adafactor: "Adafactor"
         case .muon: "Muon"
         }
     }
