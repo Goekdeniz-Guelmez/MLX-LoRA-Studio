@@ -57,6 +57,7 @@ struct ContentView: View {
     }
 
     @ViewBuilder
+    @MainActor
     private var detailView: some View {
         switch store.selection {
         case .train:
@@ -76,6 +77,7 @@ struct ContentView: View {
         }
     }
 
+    @MainActor
     private var playbackTitle: String {
         // Toolbar always reflects the training runner — see the
         // `if store.selection == .train` gate in the toolbar block.
@@ -85,6 +87,7 @@ struct ContentView: View {
         return "Run"
     }
 
+    @MainActor
     private var playbackSymbol: String {
         if store.trainingRunner.isRunning {
             return store.trainingRunner.isPaused ? "play.fill" : "pause.fill"
