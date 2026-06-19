@@ -37,7 +37,6 @@ enum PythonEnvironmentDiscovery {
         var candidates: [Candidate] = []
         let home = NSHomeDirectory()
 
-        // 1. `which -a python3 python` — anything on PATH.
         let which = await runShell(["-lc", "command -v python3 python 2>/dev/null"])
         for line in which.stdout.split(whereSeparator: \.isNewline) {
             let path = String(line.trimmingCharacters(in: .whitespacesAndNewlines))
@@ -45,7 +44,6 @@ enum PythonEnvironmentDiscovery {
             candidates.append(Candidate(path: path, kind: inferKind(path: path), nameHint: nil))
         }
 
-        // 2. Common hardcoded locations so we find things even if PATH is sparse.
         for path in [
             "/usr/bin/python3",
             "/usr/local/bin/python3",
@@ -57,7 +55,6 @@ enum PythonEnvironmentDiscovery {
             candidates.append(Candidate(path: path, kind: inferKind(path: path), nameHint: nil))
         }
 
-        // 3. Homebrew Python libexec — what `brew install python3` actually wires into a real install (`brew --prefix python3/libexec/bin/python3`).
         if let brewPrefix = (await runShell(["-lc", "command -v brew >/dev/null 2>&1 && brew --prefix python3 2>/dev/null"]))
             .stdout.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty {
             let libexecPython = (brewPrefix as NSString).appendingPathComponent("libexec/bin/python3")
@@ -66,7 +63,6 @@ enum PythonEnvironmentDiscovery {
             }
         }
 
-        // 4. pyenv — `$(pyenv root)/versions/*/bin/python3` if pyenv is installed.
         if let pyenvRoot = (await runShell(["-lc", "command -v pyenv >/dev/null 2>&1 && pyenv root 2>/dev/null"]))
             .stdout.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty {
             let versionsDir = (pyenvRoot as NSString).appendingPathComponent("versions")
@@ -80,7 +76,6 @@ enum PythonEnvironmentDiscovery {
             }
         }
 
-        // 5. uv-managed Python installs. A DMG-launched app often has a sparse PATH, so scan uv's default store directly instead of relying only on `uv python dir`.
         let uvPythonRoots = [
             "\(home)/.local/share/uv/python",
             "\(home)/Library/Application Support/uv/python"
@@ -94,7 +89,6 @@ enum PythonEnvironmentDiscovery {
             collectUVPythons(root: uvPythonDir, candidates: &candidates)
         }
 
-        // 6. Conda envs via `conda env list --json`. We try every well-known `conda` binary so we work for miniconda / anaconda / miniforge / mambaforge / homebrew conda alike.
         let condaBins = [
             "\(NSHomeDirectory())/miniconda3/bin/conda",
             "\(NSHomeDirectory())/anaconda3/bin/conda",
@@ -111,7 +105,6 @@ enum PythonEnvironmentDiscovery {
             await collectCondaEnvs(condaBin: condaBin, candidates: &candidates)
         }
 
-        // 7. Project venvs — bounded walk of $HOME (and Desktop / Documents) to depth 2, skipping directories known to be slow or irrelevant.
         let roots = [home, "\(home)/Desktop", "\(home)/Documents"]
         for root in roots {
             walkForVenvs(in: root, depth: 0, maxDepth: 2, results: &candidates)
@@ -159,8 +152,7 @@ enum PythonEnvironmentDiscovery {
         guard let entries = try? FileManager.default.contentsOfDirectory(atPath: dir) else { return }
 
         for entry in entries {
-            if ["Library", "Applications", "Pictures", "Music", "Movies", "Public",
-                "node_modules", ".git", ".Trash", "Caches", "Downloads"].contains(entry) {
+            if ["Library", "Applications", "Pictures", "Music", "Movies", "Public", "node_modules", ".git", ".Trash", "Caches", "Downloads"].contains(entry) {
                 continue
             }
             if entry.hasPrefix(".") && entry != ".venv" && entry != ".env" { continue }
@@ -245,7 +237,6 @@ enum PythonEnvironmentDiscovery {
         await runProcess(executable: "/bin/zsh", arguments: args, timeout: 5)
     }
 
-    /// Spawns a subprocess, reads its stdout / stderr, and returns when the process exits. Hard-kills the process after `timeout` seconds so a hung Python can't block the UI scan.
     private static func runProcess(executable: String, arguments: [String], timeout: TimeInterval) async -> ShellResult {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: executable)
@@ -295,7 +286,6 @@ enum PythonEnvironmentDiscovery {
     }
 }
 
-/// Mutable buffers shared between the two read pumps and the termination handler. All access is gated by a `DispatchGroup`, so we mark the class `@unchecked Sendable` to tell the compiler we own the synchronization.
 private final class PipeBuffers: @unchecked Sendable {
     var stdout = Data()
     var stderr = Data()
