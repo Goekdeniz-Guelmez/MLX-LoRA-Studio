@@ -14,10 +14,23 @@
   </em>
 </p>
 
+<p align="center">
+  <img src="https://img.shields.io/badge/IMPORTANT-FIRST%20LAUNCH%20STEP-red?style=for-the-badge" alt="Important first launch step">
+</p>
+
+<div style="border: 4px solid #d1242f; background: #fff1f1; color: #8a1118; padding: 18px 22px; margin: 24px 0; font-size: 1.15rem;">
+  <strong>Important macOS first-launch step after installing:</strong><br><br>
+  Because this first open-source release is distributed outside the Mac App Store and is not yet notarized, macOS may show a scary "damaged", "cannot be opened", or unidentified developer warning. This does <strong>not</strong> mean the app is malware. It is Apple's quarantine flag on a freshly downloaded app bundle.<br><br>
+  After dragging <strong>MLX LoRA Studio.app</strong> into <strong>/Applications</strong>, and before opening it for the first time, open Terminal and run:
+  <pre><code>sudo xattr -dr com.apple.quarantine "/Applications/MLX LoRA Studio.app"</code></pre>
+  Then open the app normally from <strong>/Applications</strong>. You only need to do this once per installed copy.
+</div>
+
 ---
 
 ## Table of contents
 
+- [Release v1.0.0](#release-v100)
 - [Why MLX LoRA Studio?](#why-mlx-lora-studio)
 - [What it is](#what-it-is)
 - [What it isn't](#what-it-isnt)
@@ -43,6 +56,55 @@
 - [Star History](#star-history)
 - [License](#license)
 - [Acknowledgments](#acknowledgments)
+
+---
+
+## Release v1.0.0
+
+**MLX LoRA Studio v1.0.0 is the first open-source release of the app.**
+
+This release turns the underlying [`mlx-lm-lora`](https://github.com/Goekdeniz-Guelmez/mlx-lm-lora)
+trainer into a native macOS workflow for Apple Silicon: pick a model, choose a dataset,
+select an algorithm, watch live training metrics, manage previous runs, generate synthetic
+data, and publish adapters to Hugging Face without leaving the app.
+
+### What's included
+
+- **Native macOS app for Apple Silicon** built with SwiftUI and AppKit.
+- **Fully local fine-tuning workflow** for MLX-compatible language models.
+- **9 training algorithms:** SFT, DPO, CPO, ORPO, GRPO, Online DPO, XPO, RLHF Reinforce,
+  and PPO.
+- **Multiple training modes:** LoRA, DoRA, QLoRA at 4/6/8-bit, full fine-tuning, and
+  Quantization-Aware Training (QAT).
+- **Live training observability** with loss, learning rate, gradient norm, throughput,
+  progress, logs, and recent-step charts.
+- **Memory-aware run planning** with live wired/active memory monitoring and ResourceGuard
+  checks before launch.
+- **Synthetic data generation** for prompts, SFT pairs, and DPO preference triples using
+  local models.
+- **Runs archive** for configs, logs, adapters, run status, resume flows, Finder reveal,
+  and upload handoff.
+- **Hugging Face upload flow** with repository settings, model-card metadata, token handling,
+  license selection, and progress feedback.
+- **Algorithm Guide** explaining when to use each method, which hyperparameters matter, and
+  common failure modes.
+- **Python environment discovery and provisioning** so users can start from the app instead
+  of hand-assembling dependencies.
+- **Self-contained app bundle** that includes the Swift app, Python helpers, and bundled
+  trainer resources.
+- **MIT-licensed source code** so the community can inspect, modify, improve, and build on
+  the project.
+
+### First-release note
+
+This is v1.0.0, so the project is now public and usable end to end, but it is still the
+first public release. Please expect fast iteration around packaging, notarization, model
+coverage, and UX polish. Bug reports, reproducible training failures, and small focused PRs
+are very welcome.
+
+If macOS complains on first launch, run the quarantine command shown at the top of this
+README after installing the app into `/Applications`. That warning is about distribution
+signing/quarantine, not about malicious behavior.
 
 ---
 
@@ -152,17 +214,18 @@ exists to make that loop feel like using a normal Mac app:**
 1. Go to the [Releases](../../releases) page.
 2. Download the latest `MLX-LoRA-Studio-X.Y.Z.dmg`.
 3. Open the DMG, drag **MLX LoRA Studio** to **/Applications**.
-4. Launch it from `/Applications` (or `Spotlight`).
-5. On first launch, allow the bundled Python helper to be opened in **System Settings →
+4. Before opening it for the first time, run this in Terminal:
+
+   ```bash
+   sudo xattr -dr com.apple.quarantine "/Applications/MLX LoRA Studio.app"
+   ```
+
+   This clears Apple's quarantine flag from the downloaded app bundle. It is needed for
+   this first open-source release because the app is distributed outside the Mac App Store
+   and is not yet notarized; it does **not** mean the app is malware.
+5. Launch it from `/Applications` (or `Spotlight`).
+6. On first launch, allow the bundled Python helper to be opened in **System Settings →
    Privacy & Security** (Gatekeeper).
-
-If macOS blocks the app on first launch, right-click **MLX LoRA Studio** and
-choose **Open**. If macOS says the app is damaged or cannot be opened, run this
-command once:
-
-```bash
-sudo xattr -dr com.apple.quarantine "/Applications/MLX LoRA Studio.app"
-```
 
 The first time you start a run, Studio will **discover or provision** a Python environment
 with the right dependencies — no terminal needed.
