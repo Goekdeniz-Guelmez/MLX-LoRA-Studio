@@ -502,13 +502,13 @@ final class PythonJobRunner {
         pipe.fileHandleForReading.readabilityHandler = { [weak self] handle in
             let data = handle.availableData
             guard !data.isEmpty, let text = String(data: data, encoding: .utf8) else { return }
-            Task { @MainActor in
+            Task { @MainActor [weak self] in
                 self?.consume(text)
             }
         }
 
         process.terminationHandler = { [weak self] process in
-            Task { @MainActor in
+            Task { @MainActor [weak self] in
                 self?.isRunning = false
                 self?.isPaused = false
                 self?.finishProgressIfPossible()
@@ -568,13 +568,13 @@ final class PythonJobRunner {
         pipe.fileHandleForReading.readabilityHandler = { [weak self] handle in
             let data = handle.availableData
             guard !data.isEmpty, let text = String(data: data, encoding: .utf8) else { return }
-            Task { @MainActor in
+            Task { @MainActor [weak self] in
                 self?.consume(text)
             }
         }
 
         process.terminationHandler = { [weak self] process in
-            Task { @MainActor in
+            Task { @MainActor [weak self] in
                 self?.isRunning = false
                 self?.isPaused = false
                 self?.finishProgressIfPossible()
