@@ -235,7 +235,7 @@ private struct ModelDataSection: View {
 
     /// Footer line that summarises what the dropdown is showing, so the
     /// user knows whether the cache has been scanned yet.
-    private var cacheFooter: String? {
+    @MainActor private var cacheFooter: String? {
         if store.isScanningHFCache { return "Scanning local HF cache…" }
         let n = store.cachedModels.count
         let d = store.cachedDatasets.count
