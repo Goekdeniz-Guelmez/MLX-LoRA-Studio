@@ -1,5 +1,6 @@
 import SwiftUI
 
+@MainActor
 struct OnboardingTourView: View {
     @Bindable var store: AppStore
     @State private var stepIndex = 0
