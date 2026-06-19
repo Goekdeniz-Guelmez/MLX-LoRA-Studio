@@ -3,7 +3,7 @@ set -euo pipefail
 
 MODE="${1:-run}"
 APP_NAME="MLXLoRAStudio"
-BUNDLE_ID="com.goekdeniz.mlx-lora-studio"
+BUNDLE_ID="io.github.goekdeniz-guelmez.mlx-lora-studio"
 MIN_SYSTEM_VERSION="14.0"
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -17,6 +17,7 @@ DMG_VOLUME_NAME="MLX LoRA Studio"
 DMG_BACKGROUND_SOURCE="$ROOT_DIR/Sources/Media/logo_ultra-wide.png"
 DMG_BACKGROUND_NAME="logo_ultra-wide.png"
 DMG_ICON_SOURCE="$ROOT_DIR/Sources/Media/logo.png"
+CODE_SIGN_IDENTITY="${CODE_SIGN_IDENTITY:--}"
 
 pkill -x "$APP_NAME" >/dev/null 2>&1 || true
 
@@ -119,7 +120,12 @@ cat >"$INFO_PLIST" <<PLIST
 PLIST
 
 codesign_app() {
-  /usr/bin/codesign --force --deep --sign - "$APP_BUNDLE" >/dev/null
+  local args=(--force --deep --sign "$CODE_SIGN_IDENTITY")
+  if [[ "$CODE_SIGN_IDENTITY" != "-" ]]; then
+    args+=(--options runtime --timestamp)
+  fi
+
+  /usr/bin/codesign "${args[@]}" "$APP_BUNDLE" >/dev/null
 }
 
 open_app() {

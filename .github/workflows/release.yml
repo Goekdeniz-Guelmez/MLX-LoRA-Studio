@@ -74,7 +74,53 @@ jobs:
           rm -rf ~/Library/Developer/Xcode/DerivedData 2>/dev/null || true
           df -h /
 
+      - name: Check signing secrets
+        id: signing
+        env:
+          DEVELOPER_ID_CERTIFICATE_BASE64: ${{ secrets.APPLE_DEVELOPER_ID_CERTIFICATE_BASE64 }}
+          DEVELOPER_ID_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_DEVELOPER_ID_CERTIFICATE_PASSWORD }}
+          CODE_SIGN_IDENTITY: ${{ secrets.APPLE_CODESIGN_IDENTITY }}
+          NOTARY_APPLE_ID: ${{ secrets.APPLE_NOTARY_APPLE_ID }}
+          NOTARY_TEAM_ID: ${{ secrets.APPLE_NOTARY_TEAM_ID }}
+          NOTARY_PASSWORD: ${{ secrets.APPLE_NOTARY_PASSWORD }}
+        run: |
+          if [[ -n "$DEVELOPER_ID_CERTIFICATE_BASE64" \
+             && -n "$DEVELOPER_ID_CERTIFICATE_PASSWORD" \
+             && -n "$CODE_SIGN_IDENTITY" \
+             && -n "$NOTARY_APPLE_ID" \
+             && -n "$NOTARY_TEAM_ID" \
+             && -n "$NOTARY_PASSWORD" ]]; then
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+            echo "Developer ID signing and notarization are enabled."
+          else
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+            echo "Developer ID signing and notarization are disabled; building ad-hoc signed open-source artifacts."
+          fi
+
+      - name: Import Developer ID certificate
+        if: steps.signing.outputs.enabled == 'true'
+        env:
+          DEVELOPER_ID_CERTIFICATE_BASE64: ${{ secrets.APPLE_DEVELOPER_ID_CERTIFICATE_BASE64 }}
+          DEVELOPER_ID_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_DEVELOPER_ID_CERTIFICATE_PASSWORD }}
+          KEYCHAIN_PASSWORD: ${{ secrets.APPLE_KEYCHAIN_PASSWORD }}
+        run: |
+          set -euo pipefail
+          KEYCHAIN_PATH="$RUNNER_TEMP/app-signing.keychain-db"
+          CERTIFICATE_PATH="$RUNNER_TEMP/developer-id.p12"
+          CERT_PASSWORD="$DEVELOPER_ID_CERTIFICATE_PASSWORD"
+          KC_PASSWORD="${KEYCHAIN_PASSWORD:-$(uuidgen)}"
+
+          echo "$DEVELOPER_ID_CERTIFICATE_BASE64" | /usr/bin/base64 -D > "$CERTIFICATE_PATH"
+          security create-keychain -p "$KC_PASSWORD" "$KEYCHAIN_PATH"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
+          security unlock-keychain -p "$KC_PASSWORD" "$KEYCHAIN_PATH"
+          security import "$CERTIFICATE_PATH" -P "$CERT_PASSWORD" -A -t cert -f pkcs12 -k "$KEYCHAIN_PATH"
+          security list-keychain -d user -s "$KEYCHAIN_PATH" login.keychain-db
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KC_PASSWORD" "$KEYCHAIN_PATH"
+
       - name: Build the .app bundle
+        env:
+          CODE_SIGN_IDENTITY: ${{ steps.signing.outputs.enabled == 'true' && secrets.APPLE_CODESIGN_IDENTITY || '-' }}
         run: |
           set -euxo pipefail
           ./script/build_and_run.sh --package
@@ -91,6 +137,24 @@ jobs:
           echo "Found $DMG"
           ls -la dist
           file "$DMG"
+
+      - name: Notarize and staple DMG
+        if: steps.signing.outputs.enabled == 'true'
+        env:
+          NOTARY_APPLE_ID: ${{ secrets.APPLE_NOTARY_APPLE_ID }}
+          NOTARY_TEAM_ID: ${{ secrets.APPLE_NOTARY_TEAM_ID }}
+          NOTARY_PASSWORD: ${{ secrets.APPLE_NOTARY_PASSWORD }}
+        run: |
+          set -euxo pipefail
+          VERSION="${{ steps.version.outputs.VERSION }}"
+          DMG="dist/MLX-LoRA-Studio-${VERSION}.dmg"
+          xcrun notarytool submit "$DMG" \
+            --apple-id "$NOTARY_APPLE_ID" \
+            --team-id "$NOTARY_TEAM_ID" \
+            --password "$NOTARY_PASSWORD" \
+            --wait
+          xcrun stapler staple "$DMG"
+          spctl -a -vv -t open "$DMG"
 
       - name: Verify .app exists
         run: |
