@@ -38,7 +38,6 @@
 - [Configuration reference](#configuration-reference)
 - [Memory & hardware expectations](#memory--hardware-expectations)
 - [Building from source](#building-from-source)
-- [Packaging a release (.app + .dmg)](#packaging-a-release-app--dmg)
 - [Project layout](#project-layout)
 - [Contributing](#contributing)
 - [Star History](#star-history)
@@ -141,11 +140,8 @@ exists to make that loop feel like using a normal Mac app:**
   the deps" loop.
 - **ResourceGuard** — watches the OS memory pressure signals and refuses to start a
   job the system can't fit, with a clear human-readable reason.
-- **Release pipeline** — `script/build_and_run.sh` builds a redistributable `.app` and
-  `.dmg` from a single `version` file. The bundled Python + `mlx-lm-lora` checkout is
+- **Self-contained app bundle** — the bundled Python + `mlx-lm-lora` checkout is
   copied into the app, so a drag-installed copy works without the source tree.
-- **CI release** — push a `v*` tag, GitHub Actions produces a draft release with the
-  signed `.dmg` attached (see `.github/workflows/release.yml`).
 
 ---
 
@@ -160,7 +156,9 @@ exists to make that loop feel like using a normal Mac app:**
 5. On first launch, allow the bundled Python helper to be opened in **System Settings →
    Privacy & Security** (Gatekeeper).
 
-<p style="color: red;"><strong>If macOS says the app is damaged or cannot be opened, run this command once:</strong></p>
+If macOS blocks the app on first launch, right-click **MLX LoRA Studio** and
+choose **Open**. If macOS says the app is damaged or cannot be opened, run this
+command once:
 
 ```bash
 sudo xattr -dr com.apple.quarantine "/Applications/MLX LoRA Studio.app"
@@ -470,38 +468,6 @@ The build script:
 The output `.app` is fully self-contained — you can copy it to another Mac and
 it will still run, as long as that Mac has Python access (or you let Studio
 provision one).
-
----
-
-## Packaging a release (.app + .dmg)
-
-The release pipeline is fully automated. To cut a release:
-
-```bash
-# 1. Bump the version file
-echo "1.1.0" > version
-
-# 2. Commit + tag
-git add version
-git commit -m "Bump version to 1.1.0"
-git tag v1.1.0
-git push origin main --follow-tags
-```
-
-Pushing a `v*` tag triggers `.github/workflows/release.yml`:
-
-1. The build runs on a `macos-14` runner.
-2. It produces `dist/MLX-LoRA-Studio-<version>.dmg` and the matching `.app`.
-3. A **draft** GitHub Release is created with the DMG attached.
-
-Edit the draft's release notes in the GitHub UI, then publish.
-
-You can also run the pipeline locally:
-
-```bash
-./script/build_and_run.sh --package
-# → dist/MLX-LoRA-Studio-1.1.0.dmg
-```
 
 ---
 
