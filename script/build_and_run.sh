@@ -239,6 +239,66 @@ build_dmg() {
   echo "Built $dmg_path"
 }
 
+build_release_assets() {
+  local app_zip="$DIST_DIR/MLX-LoRA-Studio-${APP_VERSION}.app.zip"
+  local dmg_path="$DIST_DIR/MLX-LoRA-Studio-${APP_VERSION}.dmg"
+  local sha_path="$dmg_path.sha256"
+
+  if [[ ! -f "$dmg_path" ]]; then
+    echo "Expected DMG not found: $dmg_path" >&2
+    return 1
+  fi
+
+  (
+    cd "$DIST_DIR"
+    rm -f "$(basename "$app_zip")"
+    /usr/bin/ditto -c -k --sequesterRsrc --keepParent \
+      "MLX LoRA Studio.app" \
+      "$(basename "$app_zip")"
+    shasum -a 256 "$(basename "$dmg_path")" >"$(basename "$sha_path")"
+  )
+
+  echo "Prepared release assets:"
+  echo "  $dmg_path"
+  echo "  $sha_path"
+  echo "  $app_zip"
+}
+
+publish_github_release() {
+  local tag="${RELEASE_TAG:-v$APP_VERSION}"
+  local title="${RELEASE_TITLE:-MLX LoRA Studio $tag}"
+  local notes="${RELEASE_NOTES:-Release $tag}"
+  local target
+  local assets=(
+    "$DIST_DIR/MLX-LoRA-Studio-${APP_VERSION}.dmg"
+    "$DIST_DIR/MLX-LoRA-Studio-${APP_VERSION}.dmg.sha256"
+    "$DIST_DIR/MLX-LoRA-Studio-${APP_VERSION}.app.zip"
+  )
+
+  if ! command -v gh >/dev/null 2>&1; then
+    echo "GitHub CLI 'gh' is required for --release-package." >&2
+    echo "Install it and run 'gh auth login', then retry." >&2
+    return 1
+  fi
+
+  if ! gh auth status >/dev/null 2>&1; then
+    echo "GitHub CLI is not authenticated. Run 'gh auth login', then retry." >&2
+    return 1
+  fi
+
+  target="$(git -C "$ROOT_DIR" rev-parse HEAD)"
+  if gh release view "$tag" >/dev/null 2>&1; then
+    gh release upload "$tag" "${assets[@]}" --clobber
+    echo "Updated GitHub release $tag"
+  else
+    gh release create "$tag" "${assets[@]}" \
+      --target "$target" \
+      --title "$title" \
+      --notes "$notes"
+    echo "Created GitHub release $tag"
+  fi
+}
+
 case "$MODE" in
   run)
     codesign_app
@@ -268,8 +328,14 @@ case "$MODE" in
     codesign_app
     build_dmg
     ;;
+  --release-package|release-package)
+    codesign_app
+    build_dmg
+    build_release_assets
+    publish_github_release
+    ;;
   *)
-    echo "usage: $0 [run|--debug|--logs|--telemetry|--verify|--package]" >&2
+    echo "usage: $0 [run|--debug|--logs|--telemetry|--verify|--package|--release-package]" >&2
     exit 2
     ;;
 esac
