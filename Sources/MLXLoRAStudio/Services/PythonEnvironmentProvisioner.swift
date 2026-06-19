@@ -1,5 +1,5 @@
 import Foundation
-@preconcurrency import Dispatch
+import Dispatch
 
 enum PythonProvisionerError: LocalizedError {
     case commandFailed(exitCode: Int32, stderr: String)

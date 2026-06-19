@@ -1,5 +1,5 @@
 import Foundation
-@preconcurrency import Dispatch
+import Dispatch
 
 /// Scans the host system for available Python interpreters — system binaries,
 /// Homebrew, pyenv, uv, conda envs, and project venvs — and returns a deduplicated
