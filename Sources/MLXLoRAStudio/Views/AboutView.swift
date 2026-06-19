@@ -11,7 +11,7 @@ struct AboutView: View {
                 )
 
                 VStack(alignment: .leading, spacing: 16) {
-                    Text("MLX LoRA Studio is a native desktop app for fine-tuning language models on Apple-silicon with LoRA, DoRA, supervised fine-tuning, preference optimization, reinforcement learning, synthetic data generation, and live run monitoring.")
+                    Text("MLX LoRA Studio is a native desktop app for fine-tuning language models on Apple-silicon with LoRA, DoRA, supervised fine-tuning, preference optimization, reinforcement-style training loops, synthetic data generation, and live run monitoring.")
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
 

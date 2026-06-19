@@ -1,10 +1,28 @@
 import SwiftUI
 import AppKit
 
+/// A combo-box-style input for an HF model or dataset. The user can:
+///   - Type a value directly into the text field (an arbitrary HF id
+///     or a local path is accepted).
+///   - Click the dropdown chevron to pick from a menu of:
+///       • all assets already in the local HF cache, sorted most
+///         recently used first,
+///       • the user-typed custom list (persisted to UserDefaults),
+///       • the bundled defaults for the current training mode,
+///       • two "Add…" actions: one for a new HF repo (with a small
+///         text-input sheet) and one for a local filesystem path
+///         (which opens an `NSOpenPanel`).
+///
+/// The picker binds directly to the string the trainer reads, so
+/// picking a cached model and then clicking *Start* on the live run
+/// panel works without any intermediate copy step.
 struct HFAssetPicker: View {
     @Binding var text: String
     let kind: HFCachedAsset.Kind
     let placeholder: String
+    /// A short caption shown under the text field (e.g. "Local cache:
+    /// 12 models · 31 datasets"). Set by the parent so the picker does
+    /// not have to know about the store.
     var footer: String? = nil
 
     @Environment(AppStore.self) private var store
@@ -56,6 +74,12 @@ struct HFAssetPicker: View {
                         .font(.caption)
                         .foregroundStyle(.secondary)
                     Spacer()
+                    // Tiny "HF key set" indicator next to the cache
+                    // footer. If a token is stored, gated / private
+                    // repos will load; if not, the indicator dims
+                    // and a help-tip explains how to add one. This
+                    // keeps the user oriented at the moment they
+                    // paste a gated model id and get a 401.
                     if store.huggingFaceTokenIsSet {
                         Label("HF key set", systemImage: "key.fill")
                             .labelStyle(.titleAndIcon)
@@ -167,6 +191,7 @@ struct HFAssetPicker: View {
     }
 
     // MARK: Local path picker
+
     private func pickLocalPathWithPanel() {
         let panel = NSOpenPanel()
         panel.canChooseFiles = (kind == .dataset)
@@ -185,6 +210,7 @@ struct HFAssetPicker: View {
 }
 
 // MARK: - "Add HF repo…" sheet
+
 private struct AddHFAssetSheet: View {
     let kind: HFCachedAsset.Kind
     @State var initial: String

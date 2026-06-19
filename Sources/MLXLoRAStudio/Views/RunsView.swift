@@ -1,6 +1,16 @@
 import AppKit
 import SwiftUI
 
+/// The Runs page. Two stacked regions:
+///
+/// 1. **Active runs** — a slim list of in-memory `RunRecord`s the
+///    store has appended during this session. Shows what the user
+///    kicked off and what is still in flight.
+/// 2. **Previous runs** — a card grid of every run discovered on disk
+///    in the output root. Newest first. Click a card to open a
+///    `RunDetailSheet` modal with the loss curve, the auto-discovered
+///    metrics cards, the metrics table, and the full training settings
+///    panel for that run.
 struct RunsView: View {
     @Bindable var store: AppStore
     @State private var selectedRun: PersistedRun?
@@ -123,6 +133,7 @@ struct RunsView: View {
     }
 
     // MARK: - Header
+
     private var header: some View {
         HStack(alignment: .firstTextBaseline) {
             HeaderView(
@@ -152,6 +163,7 @@ struct RunsView: View {
     }
 
     // MARK: - Active runs
+
     @ViewBuilder
     private var activeRunsSection: some View {
         if !activeSessionRuns.isEmpty {
@@ -196,6 +208,7 @@ struct RunsView: View {
     }
 
     // MARK: - Previous runs
+
     @ViewBuilder
     private var previousRunsSection: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -248,6 +261,10 @@ struct RunsView: View {
 }
 
 // MARK: - Card
+
+/// Compact summary card for a single previous run. Shows the algorithm
+/// + model, a sparkline of the loss curve, the final loss value, and
+/// the start date. Click anywhere on the card to open the detail sheet.
 private struct RunCard: View {
     let run: PersistedRun
     let canDelete: Bool
@@ -413,6 +430,14 @@ private struct RunCard: View {
 }
 
 // MARK: - Detail sheet
+
+/// Modal that renders everything we know about a previous run: the
+/// loss curve (with validation overlay), the same auto-discovered
+/// metric cards the Live Metrics page shows, the raw metrics table,
+/// the recent trainer reports, and a settings panel summarising the
+/// exact `TrainingConfig` that was used. Re-uses `ChartCard`,
+/// `MultiLineChart`, `MetricCardGroup`, and `MetricTableRow` from the
+/// Live Metrics view so the visual language stays consistent.
 private struct RunDetailSheet: View {
     let run: PersistedRun
     let canDelete: Bool
@@ -441,6 +466,7 @@ private struct RunDetailSheet: View {
     }
 
     // MARK: Header
+
     private var header: some View {
         HStack(alignment: .center, spacing: 12) {
             VStack(alignment: .leading, spacing: 2) {
@@ -496,6 +522,7 @@ private struct RunDetailSheet: View {
     }
 
     // MARK: Loss chart
+
     @ViewBuilder
     private var lossCard: some View {
         let series = buildLossSeries()
@@ -513,6 +540,10 @@ private struct RunDetailSheet: View {
         }
     }
 
+    /// Pulls (loss, step) pairs for train + val from the persisted
+    /// metrics. Returns an empty array when the run never produced a
+    /// loss sample so the caller can decide not to render a card at
+    /// all.
     private func buildLossSeries() -> [MultiLineChart.Series] {
         let trainPairs: [(Double, Int)] = run.metrics.compactMap { m in
             m.loss.map { ($0, m.step) }
@@ -548,6 +579,7 @@ private struct RunDetailSheet: View {
     }
 
     // MARK: Auto-discovered grid
+
     @ViewBuilder
     private var autoDiscoveredGrid: some View {
         let groups = MetricCardGroup.compute(from: run.metrics)
@@ -575,6 +607,7 @@ private struct RunDetailSheet: View {
     }
 
     // MARK: Metrics table
+
     @ViewBuilder
     private var metricsTableCard: some View {
         let rows = MetricTableRow.compute(from: run.metrics)
@@ -648,6 +681,7 @@ private struct RunDetailSheet: View {
     }
 
     // MARK: Settings
+
     @ViewBuilder
     private var settingsCard: some View {
         if let syntheticSpec = run.syntheticSpec {
@@ -739,6 +773,7 @@ private struct RunDetailSheet: View {
     }
 
     // MARK: Recent reports
+
     @ViewBuilder
     private var recentReportsCard: some View {
         if !run.metrics.isEmpty {
@@ -784,6 +819,7 @@ private struct RunDetailSheet: View {
 }
 
 // MARK: - Settings grid
+
 private struct SyntheticSettingsGrid: View {
     let spec: SyntheticConfig
 
@@ -872,6 +908,10 @@ private struct SyntheticSettingsGrid: View {
     }
 }
 
+/// Two-column key/value listing of the run's `TrainingConfig`. Groups
+/// the fields into headed sections (Model & Data, Optimisation,
+/// Algorithm-specific, …) so a 60-line config doesn't become an
+/// unreadable wall of rows.
 private struct SettingsGrid: View {
     let spec: TrainingConfig
 
@@ -926,6 +966,7 @@ private struct SettingsGrid: View {
     }
 
     // MARK: - Group builders
+
     @ViewBuilder
     private func settingsGroup<Content: View>(_ title: String, @ViewBuilder _ content: () -> Content) -> some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -993,6 +1034,7 @@ private struct SettingsGrid: View {
     }
 
     // MARK: - Row + helpers
+
     private func row(_ key: String, _ value: String) -> some View {
         HStack(alignment: .firstTextBaseline) {
             Text(key)

@@ -1,6 +1,14 @@
 import SwiftUI
 
 // MARK: - Algorithm Guide
+//
+// A long-form, wiki-style reference for every training loop that
+// `mlx-lm-lora` (the package this app is built on) ships with.
+// Tapping a card in the picker at the top selects the algorithm —
+// the rest of the page is one continuous article covering it: what
+// the loss is, what the knobs do, what dataset shape it expects,
+// when to reach for it, and which settings are typically tuned.
+
 struct AlgorithmGuideView: View {
     @Binding var config: TrainingConfig
     @State private var selection: GuideSelection = .mode(.sft)
@@ -17,7 +25,7 @@ struct AlgorithmGuideView: View {
             VStack(alignment: .leading, spacing: 22) {
                 HeaderView(
                     title: "Algorithm Guide",
-                    subtitle: "A detailed reference for every training loop in mlx-lm-lora package, which MLX LoRA Studio uses.",
+                    subtitle: "A long-form reference for every training loop in mlx-lm-lora",
                     symbol: "book"
                 )
 
@@ -812,6 +820,7 @@ private struct AlgorithmArticle: View {
     }
 
     // MARK: Tips
+
     private var tipsList: some View {
         VStack(alignment: .leading, spacing: 8) {
             ForEach(Array(tips.enumerated()), id: \.offset) { _, tip in

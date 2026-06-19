@@ -27,13 +27,6 @@ struct SettingsView: View {
                         .fixedSize(horizontal: false, vertical: true)
                 }
 
-                Section("Appearance") {
-                    Toggle("Background animations", isOn: $store.decorativeAnimationsEnabled)
-                    Text("Turn this off during heavy training runs to stop the decorative canvas animation and leave more GPU headroom for MLX.")
-                        .font(.callout)
-                        .foregroundStyle(.secondary)
-                }
-
                 Section("Notifications") {
                     Toggle("Notify when jobs finish", isOn: completionNotificationsBinding)
                         .disabled(store.isUpdatingCompletionNotifications)
@@ -192,9 +185,21 @@ struct SettingsView: View {
     }
 }
 
+/// Password-style field for the Hugging Face personal access token.
+///
+/// The field does NOT keep the secret in its own state. Instead, it
+/// shows a placeholder ("••• set" when a token is already in the
+/// Keychain, "Paste token…" when not) and only switches into a real
+/// text editor once the user clicks "Edit" — at which point the new
+/// value is committed to the Keychain on commit and cleared from
+/// memory. This is the same UX pattern Apple uses for saved Wi-Fi
+/// passwords in the network settings.
 private struct HuggingFaceTokenField: View {
     @Bindable var store: AppStore
 
+    /// `true` while the user is in the middle of typing a new token.
+    /// When `false`, the field renders the placeholder, never the
+    /// real stored value.
     @State private var isEditing = false
     @State private var draft = ""
 
@@ -208,6 +213,10 @@ private struct HuggingFaceTokenField: View {
                         .textFieldStyle(.roundedBorder)
                         .onSubmit(commit)
                 } else {
+                    // The placeholder is the only thing visible when
+                    // not editing. We intentionally never read the
+                    // token back from the Keychain into the field —
+                    // that would defeat the point of a secret field.
                     Text(placeholder)
                         .foregroundStyle(store.huggingFaceTokenIsSet ? .primary : .secondary)
                         .frame(maxWidth: .infinity, alignment: .leading)

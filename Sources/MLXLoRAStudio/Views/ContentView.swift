@@ -5,11 +5,6 @@ struct ContentView: View {
 
     var body: some View {
         ZStack {
-            if store.decorativeAnimationsEnabled {
-                StudioAnimatedBackground()
-                    .ignoresSafeArea()
-            }
-
             NavigationSplitView(columnVisibility: $store.columnVisibility) {
                 SidebarView(selection: $store.selection, store: store)
                     .navigationSplitViewColumnWidth(min: 200, ideal: 240, max: 320)
@@ -33,6 +28,13 @@ struct ContentView: View {
         .animation(.easeInOut(duration: 0.2), value: store.trainingRunner.isRunning)
         .animation(.easeInOut(duration: 0.2), value: store.trainingRunner.isPaused)
         .toolbar {
+            // The upper-right toolbar pair is reserved for the
+            // **training** run only. The Synthetic and Upload pages
+            // each ship their own Start / Cancel pill at the top of
+            // the page; showing a second global control there would
+            // let a user accidentally cancel a run they started
+            // with the page pill. So we hide the pair entirely on
+            // every non-Train page.
             if store.selection == .train {
                 ToolbarItemGroup(placement: .primaryAction) {
                     Button {
@@ -75,6 +77,8 @@ struct ContentView: View {
     }
 
     private var playbackTitle: String {
+        // Toolbar always reflects the training runner — see the
+        // `if store.selection == .train` gate in the toolbar block.
         if store.trainingRunner.isRunning {
             return store.trainingRunner.isPaused ? "Resume" : "Pause"
         }

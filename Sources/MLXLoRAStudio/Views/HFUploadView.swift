@@ -70,7 +70,8 @@ private struct UploadActionStrip: View {
     private var isRunning: Bool { store.hfUploadRunner.isRunning }
     private var canUploadModel: Bool {
         !store.hfUpload.localModelPath.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
-        !store.hfUpload.modelRepo.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        !store.hfUpload.modelRepo.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
+        !(store.hfUpload.modelUploadKind == .adaptersOnly && store.hfUploadAdaptersUnavailable)
     }
     private var canUploadDataset: Bool {
         !store.hfUpload.localDatasetPath.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
@@ -128,12 +129,13 @@ private struct ModelUploadSection: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             SectionTitle("Model Weights")
-            Picker("Upload", selection: $store.hfUpload.modelUploadKind) {
-                ForEach(HFModelUploadKind.allCases) { kind in
-                    Text(kind.title).tag(kind)
-                }
+            ModelUploadKindSegmentedControl(
+                selection: $store.hfUpload.modelUploadKind,
+                adaptersUnavailable: store.hfUploadAdaptersUnavailable
+            )
+            .onChange(of: store.hfUpload.modelUploadKind) {
+                store.normalizeHFUploadKindForSelectedModel()
             }
-            .pickerStyle(.segmented)
 
             LocalRunPicker(
                 title: "Training run",
@@ -141,6 +143,9 @@ private struct ModelUploadSection: View {
                 selection: $store.hfUpload.localModelPath,
                 outputs: store.trainingRunOutputs
             )
+            .onChange(of: store.hfUpload.localModelPath) {
+                store.normalizeHFUploadKindForSelectedModel()
+            }
             CustomFolderField(title: "Custom model folder", path: $store.hfUpload.localModelPath)
             TextField("Target model repo, e.g. username/model-name", text: $store.hfUpload.modelRepo)
 
@@ -153,11 +158,63 @@ private struct ModelUploadSection: View {
     }
 
     private var modelHint: String {
-        switch store.hfUpload.modelUploadKind {
+        if store.hfUploadAdaptersUnavailable {
+            return "This run has no adapter checkpoint files, so upload the merged model weights instead."
+        }
+        return switch store.hfUpload.modelUploadKind {
         case .adaptersOnly:
             "Uploads adapter files, adapter config, tokenizer/config metadata when present, and a generated README.md."
         case .mergedWeights:
             "Uploads the full selected model folder, including merged model weights, tokenizer/config files, and README.md."
+        }
+    }
+}
+
+private struct ModelUploadKindSegmentedControl: NSViewRepresentable {
+    @Binding var selection: HFModelUploadKind
+    let adaptersUnavailable: Bool
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(selection: $selection)
+    }
+
+    func makeNSView(context: Context) -> NSSegmentedControl {
+        let control = NSSegmentedControl(
+            labels: HFModelUploadKind.allCases.map(\.title),
+            trackingMode: .selectOne,
+            target: context.coordinator,
+            action: #selector(Coordinator.selectionChanged(_:))
+        )
+        control.segmentStyle = .rounded
+        control.controlSize = .regular
+        control.setContentHuggingPriority(.defaultLow, for: .horizontal)
+        return control
+    }
+
+    func updateNSView(_ control: NSSegmentedControl, context: Context) {
+        context.coordinator.selection = $selection
+        control.segmentCount = HFModelUploadKind.allCases.count
+
+        for (index, kind) in HFModelUploadKind.allCases.enumerated() {
+            control.setLabel(kind.title, forSegment: index)
+            control.setWidth(0, forSegment: index)
+            control.setEnabled(!(kind == .adaptersOnly && adaptersUnavailable), forSegment: index)
+        }
+
+        control.selectedSegment = HFModelUploadKind.allCases.firstIndex(of: selection) ?? 0
+    }
+
+    final class Coordinator: NSObject {
+        var selection: Binding<HFModelUploadKind>
+
+        init(selection: Binding<HFModelUploadKind>) {
+            self.selection = selection
+        }
+
+        @MainActor @objc func selectionChanged(_ sender: NSSegmentedControl) {
+            let index = sender.selectedSegment
+            guard HFModelUploadKind.allCases.indices.contains(index) else { return }
+            selection.wrappedValue = HFModelUploadKind.allCases[index]
         }
     }
 }
