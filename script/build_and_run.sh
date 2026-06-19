@@ -2,6 +2,7 @@
 set -euo pipefail
 
 MODE="${1:-run}"
+VERSION_ARG="${2:-}"
 APP_NAME="MLXLoRAStudio"
 BUNDLE_ID="io.github.goekdeniz-guelmez.mlx-lora-studio"
 MIN_SYSTEM_VERSION="14.0"
@@ -82,7 +83,16 @@ cp -R "$ROOT_DIR/vendor" "$SUPPORT_DIR/vendor"
 # Single source of truth for the bundle version. Falls back to
 # "0.0.0" if the file is missing so the plist still writes cleanly
 # during a fresh clone.
-APP_VERSION="$([[ -f "$ROOT_DIR/version" ]] && tr -d '[:space:]' < "$ROOT_DIR/version" || echo "0.0.0")"
+DEFAULT_APP_VERSION="$([[ -f "$ROOT_DIR/version" ]] && tr -d '[:space:]' < "$ROOT_DIR/version" || echo "0.0.0")"
+if [[ -n "$VERSION_ARG" ]]; then
+  APP_VERSION="${VERSION_ARG#v}"
+elif [[ -n "${RELEASE_VERSION:-}" ]]; then
+  APP_VERSION="${RELEASE_VERSION#v}"
+elif [[ -n "${RELEASE_TAG:-}" ]]; then
+  APP_VERSION="${RELEASE_TAG#v}"
+else
+  APP_VERSION="$DEFAULT_APP_VERSION"
+fi
 
 cat >"$INFO_PLIST" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
@@ -335,7 +345,7 @@ case "$MODE" in
     publish_github_release
     ;;
   *)
-    echo "usage: $0 [run|--debug|--logs|--telemetry|--verify|--package|--release-package]" >&2
+    echo "usage: $0 [run|--debug|--logs|--telemetry|--verify|--package|--release-package [version]]" >&2
     exit 2
     ;;
 esac
