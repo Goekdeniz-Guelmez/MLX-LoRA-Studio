@@ -19,6 +19,10 @@ enum PythonProvisionerError: LocalizedError {
     }
 }
 
+/// Creates new Python environments (venv or conda) and reports the path of the
+/// resulting interpreter. Streaming progress is forwarded to an optional
+/// `log` closure so the Settings view can show "[Studio] …" lines while the
+/// process runs.
 @MainActor
 enum PythonEnvironmentProvisioner {
 
@@ -29,6 +33,8 @@ enum PythonEnvironmentProvisioner {
             .appending(path: "envs", directoryHint: .isDirectory)
     }
 
+    /// Creates a venv at `<parentDir>/<name>` using `basePython` and returns
+    /// the path to the new env's `bin/python` interpreter.
     static func createVenv(
         name: String,
         basePython: String,
@@ -63,6 +69,11 @@ enum PythonEnvironmentProvisioner {
         return python
     }
 
+    /// Creates a conda env named `name` using the first `conda` binary on
+    /// PATH (or in a well-known install location) and returns the path to the
+    /// new env's `bin/python` interpreter. The conda env inherits the
+    /// major.minor Python version of the current `basePython` so MLX wheels
+    /// line up with the rest of the system.
     static func createCondaEnv(
         name: String,
         basePython: String,
@@ -146,6 +157,8 @@ enum PythonEnvironmentProvisioner {
         throw PythonProvisionerError.commandFailed(exitCode: result.status, stderr: result.stderr)
     }
 
+    /// Spawns a subprocess, streams its output line-by-line through `log`,
+    /// and returns once the process exits.
     private static func runCapturing(
         executable: String,
         arguments: [String],
@@ -165,6 +178,8 @@ enum PythonEnvironmentProvisioner {
             return CapturedResult(status: -1, stdout: "", stderr: "")
         }
 
+        // Drain stdout / stderr concurrently. The buffer class is the only
+        // shared state, and all access goes through a DispatchGroup barrier.
         let buffers = PipeBuffers()
         let group = DispatchGroup()
         group.enter()
@@ -186,6 +201,8 @@ enum PythonEnvironmentProvisioner {
                     let stdout = String(data: buffers.stdout, encoding: .utf8) ?? ""
                     let stderr = String(data: buffers.stderr, encoding: .utf8) ?? ""
                     let lines = Self.collectLogLines(stdout: stdout, stderr: stderr)
+                    // Hop back to the main actor to invoke the @MainActor log
+                    // callback. We can't invoke it from this background queue.
                     Task { @MainActor in
                         if let log {
                             for line in lines { log(line) }
@@ -211,6 +228,9 @@ enum PythonEnvironmentProvisioner {
     }
 }
 
+/// Mutable buffers shared between the two read pumps and the termination
+/// handler. All access is gated by a `DispatchGroup`, so we mark the class
+/// `@unchecked Sendable` to tell the compiler we own the synchronization.
 private final class PipeBuffers: @unchecked Sendable {
     var stdout = Data()
     var stderr = Data()

@@ -24,11 +24,6 @@ enum RunnerError: LocalizedError {
 @MainActor
 @Observable
 final class PythonJobRunner {
-    private enum ProgressMode {
-        case units
-        case epochs
-    }
-
     var isRunning = false
     var isPaused = false
     var logLines: [String] = []
@@ -41,13 +36,17 @@ final class PythonJobRunner {
     var progressTotal: Int?
     var progressLabel = ""
     private var progressBase = 0
-    private var progressMode: ProgressMode = .units
-    private var stepsPerEpoch: Int?
 
     private var process: Process?
     private var outputPipe: Pipe?
     private let parser = MetricsParser()
 
+    // Debounced writer for `metrics.json`. The trainer emits a steady
+    // stream of report lines, so writing on every consume would thrash
+    // the disk. The flush is rescheduled on every new sample; the file
+    // is only ever written when the run folder is a training folder
+    // (i.e. `lastRunFolder` is set) and at least one metric has been
+    // recorded.
     @ObservationIgnored private var metricsFlushTask: Task<Void, Never>?
     private static let metricsFlushDelay: Duration = .milliseconds(750)
 
@@ -83,11 +82,10 @@ final class PythonJobRunner {
         }
         lastSpecPath = specURL.path
         lastRunFolder = runURL.path
-        if config.epochs > 0 {
-            configureProgress(total: config.epochs, label: "Training epochs", mode: .epochs)
-        } else {
-            configureProgress(total: max(config.iters, 0), label: "Training")
-        }
+        configureProgress(
+            total: config.epochs > 0 ? nil : max(config.iters, 0),
+            label: "Training steps"
+        )
         appendSystemLine("Run folder: \(runURL.path)")
 
         let args = [
@@ -117,6 +115,12 @@ final class PythonJobRunner {
         workingDirectory: String,
         outputRoot: String,
         huggingFaceToken: String? = nil,
+        // Keychain-saved API key for the selected provider backend.
+        // The store reads this on demand from the macOS Keychain (per
+        // provider) and passes it in here so the runner doesn't have
+        // to know about Keychain slots. A non-empty value typed into
+        // `config.apiKey` by the user (a one-off override) takes
+        // precedence over this saved value.
         savedSyntheticAPIKey: String? = nil,
         onCompletion: (@MainActor (Int32) -> Void)? = nil
     ) async throws -> String {
@@ -190,6 +194,12 @@ final class PythonJobRunner {
         if !config.validSplit.isEmpty { args += ["--valid-split", config.validSplit] }
         if !config.testSplit.isEmpty { args += ["--test-split", config.testSplit] }
         args += ["--batch-size", "\(config.batchSize)"]
+        // The Python CLI declares this flag with
+        // `argparse.BooleanOptionalAction`, so argparse auto-generates
+        // the negation as `--no-use-generation-settings` (NOT
+        // `--no-generation-settings`). Sending the wrong form makes
+        // the trainer die with `unrecognized arguments` before the
+        // run even starts. Both SFT and DPO honor the same flag.
         args.append(config.useGenerationSettings ? "--use-generation-settings" : "--no-use-generation-settings")
         if config.useGenerationSettings {
             args += ["--max-tokens", "\(config.maxTokens)"]
@@ -203,6 +213,14 @@ final class PythonJobRunner {
         }
         args += ["--seed", "\(config.seed)"]
 
+        // The form-typed `config.apiKey` always wins (it's a one-off
+        // override the user just pasted in). If the user cleared the
+        // field, fall back to the saved key from the Keychain slot
+        // for the currently-selected backend. Either way we inject
+        // the result as a synthetic-specific env var so we never
+        // touch the parent environment's `OPENAI_API_KEY` /
+        // `OPENROUTER_API_KEY` / etc. — the user may have those set
+        // globally for other tools and we don't want to interfere.
         let resolvedKey = config.apiKey.trimmingCharacters(in: .whitespacesAndNewlines)
         let effectiveKey = resolvedKey.isEmpty
             ? (savedSyntheticAPIKey?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "")
@@ -392,20 +410,15 @@ final class PythonJobRunner {
         progressTotal = nil
         progressLabel = ""
         progressBase = 0
-        progressMode = .units
-        stepsPerEpoch = nil
     }
 
     private func configureProgress(
         total: Int?,
         label: String,
-        initial: Int = 0,
-        mode: ProgressMode = .units
+        initial: Int = 0
     ) {
         progressTotal = total.flatMap { $0 > 0 ? $0 : nil }
         progressBase = max(initial, 0)
-        progressMode = mode
-        stepsPerEpoch = nil
         if let progressTotal {
             progressCurrent = min(progressBase, progressTotal)
         } else {
@@ -503,6 +516,10 @@ final class PythonJobRunner {
                 self?.outputPipe?.fileHandleForReading.readabilityHandler = nil
                 self?.process = nil
                 self?.outputPipe = nil
+                // The on-disk metrics file is the source of truth for
+                // the Runs page after the process exits, so write it
+                // synchronously before we let the run hand back to the
+                // store.
                 self?.flushMetricsNow()
                 onCompletion?(process.terminationStatus)
             }
@@ -590,8 +607,17 @@ final class PythonJobRunner {
             let plainLine = ANSIText.clean(line)
             guard !plainLine.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { continue }
             guard !TerminalNoiseFilter.shouldSuppress(plainLine) else { continue }
+            // The parser is stateful so it can buffer a GRPO multi-line
+            // block across calls; a `nil` return just means "this line
+            // is part of a block I'm still assembling, or it's noise".
             for metric in parser.consume(plainLine) {
                 updateProgress(step: metric.step)
+                // The trainer emits two lines per report: a tqdm progress
+                // bar (`... loss: 2.444, it/s: 0.81]`) and a `tqdm.write`
+                // `Iter N: loss …, lr …, it/s …, tok/s …, peak_mem …`
+                // line. Each carries a different subset of keys. We merge
+                // metrics that share a step so the user sees a complete
+                // picture instead of whichever line arrived last.
                 if let lastIndex = metrics.lastIndex(where: { $0.step == metric.step }),
                    !metric.values.isEmpty {
                     let existing = metrics[lastIndex]
@@ -627,33 +653,17 @@ final class PythonJobRunner {
     }
 
     private func updateProgress(step: Int) {
-        switch progressMode {
-        case .units:
-            updateProgress(current: step)
-        case .epochs:
-            guard let epoch = epochProgress(forStep: step) else { return }
-            updateProgress(current: epoch)
-        }
+        updateProgress(current: step)
     }
 
     private func updateProgress(fromLogLine line: String) {
-        guard let total = progressTotal else { return }
-        if progressMode == .epochs {
-            updateEpochProgressMetadata(fromLogLine: line)
-        }
+        updateStepProgressMetadata(fromLogLine: line)
         if let parsed = Self.tqdmProgress(in: line) {
-            switch progressMode {
-            case .units:
-                if parsed.total > 0 {
-                    progressTotal = max(total, progressBase + parsed.total)
-                }
-                updateProgress(current: progressBase + parsed.current)
-            case .epochs:
-                if stepsPerEpoch == nil, parsed.total > 0, total > 0 {
-                    stepsPerEpoch = max(Int(ceil(Double(parsed.total) / Double(total))), 1)
-                }
-                updateProgress(step: parsed.current)
+            if parsed.total > 0 {
+                let parsedTotal = progressBase + parsed.total
+                progressTotal = max(progressTotal ?? 0, parsedTotal)
             }
+            updateProgress(current: progressBase + parsed.current)
             return
         }
 
@@ -663,8 +673,7 @@ final class PythonJobRunner {
         }
     }
 
-    private func updateEpochProgressMetadata(fromLogLine line: String) {
-        guard let total = progressTotal, total > 0, stepsPerEpoch == nil else { return }
+    private func updateStepProgressMetadata(fromLogLine line: String) {
         let pattern = #"Calculated\s+(\d+)\s+iterations\s+from\s+(\d+)\s+epochs"#
         guard let regex = try? NSRegularExpression(pattern: pattern, options: [.caseInsensitive]) else { return }
         let range = NSRange(line.startIndex..<line.endIndex, in: line)
@@ -678,12 +687,8 @@ final class PythonJobRunner {
               epochs > 0 else {
             return
         }
-        stepsPerEpoch = max(Int(ceil(Double(iterations) / Double(epochs))), 1)
-    }
-
-    private func epochProgress(forStep step: Int) -> Int? {
-        guard let stepsPerEpoch, stepsPerEpoch > 0 else { return nil }
-        return Int(ceil(Double(max(step, 0)) / Double(stepsPerEpoch)))
+        progressTotal = iterations
+        progressCurrent = min(max(progressCurrent ?? 0, 0), iterations)
     }
 
     private func finishProgressIfPossible() {
@@ -727,6 +732,11 @@ final class PythonJobRunner {
     }
 
     // MARK: - Metrics persistence
+
+    /// Reschedule a debounced write of `metrics` to
+    /// `<lastRunFolder>/metrics.json`. Cancels any in-flight write
+    /// first, so a torrent of trainer output collapses to a single
+    /// disk hit per quiet period.
     private func scheduleMetricsFlush() {
         guard !lastRunFolder.isEmpty else { return }
         metricsFlushTask?.cancel()
@@ -739,6 +749,9 @@ final class PythonJobRunner {
         }
     }
 
+    /// Write `metrics` to disk synchronously. Safe to call repeatedly
+    /// (each write is atomic) and from the termination handler
+    /// (we're already on the main actor at that point).
     private func flushMetricsNow() {
         metricsFlushTask?.cancel()
         metricsFlushTask = nil
@@ -759,6 +772,13 @@ enum ShellQuote {
     }
 }
 
+/// Injects a Hugging Face personal access token into a child-process
+/// environment dict as both `HF_TOKEN` and `HUGGING_FACE_HUB_TOKEN` —
+/// the `huggingface_hub` library checks either name, so setting both
+/// makes the runner robust to whichever the trainer code path reads.
+/// An empty / nil token is treated as "no token": both env vars are
+/// removed so a stale token from the parent environment does not
+/// leak into the child.
 enum HuggingFaceEnvironment {
     static func apply(_ token: String?, to environment: inout [String: String]) {
         let trimmed = token?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
@@ -804,6 +824,37 @@ enum ANSIText {
     }
 }
 
+/// Streaming parser for trainer stdout. Three report formats are supported:
+///
+/// 0. **Studio JSON** emitted by `Backend/training_runner.py` callbacks:
+///    ```
+///    @@studio_metric {"event":"train","iteration":10,"train_loss":1.2}
+///    ```
+///
+/// 1. **Inline** (SFT, DPO, CPO, ORPO, PPO, Online-DPO, XPO, RLHF Reinforce):
+///    ```
+///    Iter 150: Train loss 2.011, lr 1.000e-05, it/s 0.675, tok/s 1259.263, peak_mem 7.287GB
+///    ```
+///    One line, several `key value` chunks joined by `,`.
+///
+/// 2. **GRPO block** (delimited by `========`):
+///    ```
+///    ========================================
+///    Iter 30:
+///    ----------------------------------------
+///    Loss: 2.011
+///    Total Rewards:  μ=0.512, σ=0.123
+///    • helpfulness: μ=0.621, σ=0.142, cov=87.50%
+///    ...
+///    ========================================
+///    ```
+///    Multiple lines, parsed together. The per-reward `•` lines are
+///    expanded into three keys (`reward_<name>_mean`, `..._std`, `..._coverage`).
+///
+/// `consume(_:)` is stateful: a GRPO block may be split across many
+/// reads of the pipe, so we accumulate lines until we see the closing
+/// `=========` and then emit the assembled metric. `reset()` clears the
+/// accumulator and is called at the start of every new job.
 final class MetricsParser {
     private var grpoBlock: [String] = []
     private var inGrpoBlock = false
@@ -813,6 +864,7 @@ final class MetricsParser {
         inGrpoBlock = false
     }
 
+    /// Feed a single line (already ANSI-stripped). Returns 0 or 1 metrics.
     func consume(_ line: String) -> [TrainingMetric] {
         let plain = ANSIText.clean(line)
         let trimmed = plain.trimmingCharacters(in: .whitespaces)
@@ -822,6 +874,9 @@ final class MetricsParser {
             return [metric]
         }
 
+        // GRPO reports are wrapped in 80-char `=` lines. We accumulate
+        // everything between the opening and closing `===` line and
+        // only parse once we have the full block.
         if trimmed.hasPrefix("=======") {
             if !inGrpoBlock {
                 inGrpoBlock = true
@@ -849,6 +904,7 @@ final class MetricsParser {
     }
 
     // MARK: - Studio JSON parser
+
     private func parseStudioMetric(_ line: String) -> TrainingMetric? {
         let prefix = "@@studio_metric "
         guard line.hasPrefix(prefix) else { return nil }
@@ -889,9 +945,12 @@ final class MetricsParser {
     }
 
     // MARK: - Inline parser
+
     private func parseInline(_ line: String) -> TrainingMetric? {
         let lower = line.lowercased()
-
+        // Inline trainers always mention `loss`, `peak_mem`/`peak mem`,
+        // or `it/s`. GRPO-style lines shouldn't reach here because the
+        // block detector above intercepts them first.
         func has(_ needle: String) -> Bool {
             lower.range(of: needle) != nil
         }
@@ -903,15 +962,27 @@ final class MetricsParser {
         let step = firstInt(afterAnyOf: ["iter", "step"], in: lower) ?? 0
         var values: [String: Double] = [:]
 
+        // Loss (training / validation / final test)
+        let isValidationLine = lower.contains("| validation |")
+        let isTestLine = lower.contains("| test |")
+        if let v = firstDouble(afterAnyOf: ["val loss", "validation loss"], in: lower) {
+            values["val_loss"] = v
+        } else if isValidationLine, let v = firstDouble(afterAnyOf: ["loss"], in: lower) {
+            values["val_loss"] = v
+        }
+        if let v = firstDouble(afterAnyOf: ["test loss"], in: lower) {
+            values["test_loss"] = v
+        } else if isTestLine, let v = firstDouble(afterAnyOf: ["loss"], in: lower) {
+            values["test_loss"] = v
+        }
         if let v = firstDouble(afterAnyOf: ["train loss"], in: lower) {
             values["loss"] = v
-        } else if let v = firstDouble(afterAnyOf: ["loss"], in: lower) {
+        } else if !isValidationLine && !isTestLine,
+                  let v = firstDouble(afterAnyOf: ["loss"], in: lower) {
             if values["loss"] == nil { values["loss"] = v }
         }
 
-        if let v = firstDouble(afterAnyOf: ["val loss", "validation loss"], in: lower) {
-            values["val_loss"] = v
-        }
+        // Validation metrics
         if let v = firstDouble(afterAnyOf: ["val chosen reward"], in: lower) {
             values["val_chosen_r"] = v
         }
@@ -928,16 +999,19 @@ final class MetricsParser {
             values["val_advantages"] = v
         }
 
+        // Learning rate
         if let v = firstDouble(afterAnyOf: ["learning rate"], in: lower) {
             values["learning_rate"] = v
         } else if let v = firstDouble(afterAnyOf: ["lr"], in: lower) {
             if values["learning_rate"] == nil { values["learning_rate"] = v }
         }
 
+        // Memory — multiple spellings across trainers
         if let v = firstDouble(afterAnyOf: ["peak_mem", "peak mem", "peak memory", "memory:"], in: lower) {
             values["peak_mem"] = v
         }
 
+        // Throughput
         if let v = firstDouble(afterAnyOf: ["it/s", "iterations/s", "it /s"], in: lower) {
             values["it_s"] = v
         }
@@ -945,6 +1019,7 @@ final class MetricsParser {
             values["tok_s"] = v
         }
 
+        // Preference rewards (DPO/CPO/ORPO/PPO/Online-DPO/XPO)
         if let v = firstDouble(afterAnyOf: ["chosen_r", "chosen r"], in: lower) {
             values["chosen_r"] = v
         }
@@ -952,6 +1027,7 @@ final class MetricsParser {
             values["rejected_r"] = v
         }
 
+        // RLHF Reinforce — guard `rewards` against `total_rewards_*` etc.
         if let v = firstDouble(afterAnyOf: ["rewards"], in: lower) {
             let prev = charBefore("rewards", in: lower)
             if !isAlnum(prev) {
@@ -965,6 +1041,7 @@ final class MetricsParser {
             if values["advantages"] == nil { values["advantages"] = v }
         }
 
+        // Trained tokens (informational)
         if let v = firstDouble(afterAnyOf: ["trained_tok", "trained tok"], in: lower) {
             values["trained_tok"] = v
         }
@@ -974,6 +1051,7 @@ final class MetricsParser {
     }
 
     // MARK: - GRPO block parser
+
     private func parseGrpoBlock(_ lines: [String]) -> TrainingMetric? {
         guard !lines.isEmpty else { return nil }
         let joined = lines.joined(separator: "\n")
@@ -982,6 +1060,7 @@ final class MetricsParser {
 
         var values: [String: Double] = [:]
 
+        // Common `Key: value` lines.
         let keyValueMap: [(key: String, aliases: [String])] = [
             ("loss",                  ["loss:"]),
             ("learning_rate",         ["learning rate:"]),
@@ -998,6 +1077,9 @@ final class MetricsParser {
             }
         }
 
+        // `μ=X.XXX, σ=Y.YYY` and `cov=Z.ZZ%` sub-keys. Per-reward lines
+        // become `reward_<name>_*` keys; top-level lines become
+        // `<key>_mean` / `<key>_std`.
         for line in lines {
             let trimmedLine = line.trimmingCharacters(in: .whitespaces)
             if let rewardName = parsePerRewardName(from: trimmedLine) {
@@ -1014,6 +1096,7 @@ final class MetricsParser {
             }
         }
 
+        // `Speed:` and `Clipping:` lines have an unusual layout.
         for line in lines {
             let lineLower = line.lowercased()
             if lineLower.contains("speed:") {
@@ -1042,6 +1125,8 @@ final class MetricsParser {
     }
 
     // MARK: - Sub-parsers
+
+    /// Extract the `name` from a per-reward line `• name: μ=…`.
     private func parsePerRewardName(from line: String) -> String? {
         guard line.hasPrefix("•") else { return nil }
         let body = line.dropFirst().trimmingCharacters(in: .whitespaces)
@@ -1053,6 +1138,7 @@ final class MetricsParser {
         return name.isEmpty ? nil : name
     }
 
+    /// Parse `μ=X.XXX, σ=Y.YYY, cov=Z.ZZ%` from a line.
     private func parseMuSigmaCov(in line: String) -> (Double, Double, Double?)? {
         let muPattern = #"μ\s*=\s*([-+]?[0-9]*\.?[0-9]+(?:e[-+]?[0-9]+)?)"#
         let sigmaPattern = #"σ\s*=\s*([-+]?[0-9]*\.?[0-9]+(?:e[-+]?[0-9]+)?)"#
@@ -1064,6 +1150,7 @@ final class MetricsParser {
         return (mean, std, cov)
     }
 
+    /// Parse a top-level line like `Total Rewards:  μ=0.512, σ=0.123`.
     private func parseTopLevelMuSigma(in line: String) -> (String, Double, Double?)? {
         guard !line.hasPrefix("•") else { return nil }
         guard let colonIndex = line.firstIndex(of: ":") else { return nil }
@@ -1081,6 +1168,7 @@ final class MetricsParser {
     }
 
     // MARK: - Number extraction helpers
+
     private func firstInt(afterAnyOf keys: [String], in text: String) -> Int? {
         firstNumber(afterAnyOf: keys, in: text).map { Int($0) }
     }

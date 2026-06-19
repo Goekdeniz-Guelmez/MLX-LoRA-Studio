@@ -1,10 +1,15 @@
+#!/usr/bin/env python3
+"""App-owned training runner with notebook-style per-algorithm pipelines."""
+
 from __future__ import annotations
 
 import argparse
 import contextlib
+import io
 import json
 import math
 import os
+import re
 import resource
 import sys
 from pathlib import Path
@@ -175,6 +180,21 @@ class QuietVendorOutput:
         pass
 
 
+class TeeCapture:
+    """Forward output to the app terminal while keeping a copy for parsing."""
+
+    def __init__(self, stream=STUDIO_OUT) -> None:
+        self.stream = stream
+        self.buffer = io.StringIO()
+
+    def write(self, text: str) -> int:
+        self.buffer.write(text)
+        return self.stream.write(text)
+
+    def flush(self) -> None:
+        self.stream.flush()
+
+
 @contextlib.contextmanager
 def quiet_vendor_output():
     sink = QuietVendorOutput()
@@ -243,9 +263,16 @@ class StudioCallback(TrainingCallback):
     def _format_line(self, event: str, payload: dict[str, Any]) -> str:
         step = payload.get("iteration", 0)
         parts = [f"Iter {step}", event.title()]
-        loss = payload.get("train_loss", payload.get("val_loss"))
+        loss = payload.get(
+            "train_loss", payload.get("val_loss", payload.get("test_loss"))
+        )
         if loss is not None:
-            parts.append(f"loss {float(loss):.3f}")
+            label = "loss"
+            if event == "validation":
+                label = "val loss"
+            elif event == "test":
+                label = "test loss"
+            parts.append(f"{label} {float(loss):.3f}")
         lr = payload.get("learning_rate")
         if lr is not None:
             parts.append(f"lr {float(lr):.2e}")
@@ -266,10 +293,54 @@ class StudioCallback(TrainingCallback):
     def on_val_loss_report(self, val_info: dict[str, Any]) -> None:
         self._emit("validation", val_info)
 
+    def on_test_loss_report(self, test_info: dict[str, Any]) -> None:
+        self._emit("test", test_info)
+
+
+def _dataset_len(dataset: Any) -> int | None:
+    try:
+        return len(dataset)
+    except TypeError:
+        return None
+
+
+def _strip_ansi(text: str) -> str:
+    return re.sub(r"\x1B\[[0-?]*[ -/]*[@-~]", "", text)
+
+
+def _first_float(pattern: str, text: str) -> float | None:
+    match = re.search(pattern, text, flags=re.IGNORECASE)
+    return float(match.group(1)) if match else None
+
+
+def _test_metrics_from_output(output: str, iteration: int) -> dict[str, Any]:
+    plain = _strip_ansi(output)
+    metrics: dict[str, Any] = {"iteration": iteration}
+    loss = _first_float(r"\bLoss:\s*([-+]?\d+(?:\.\d+)?(?:e[-+]?\d+)?)", plain)
+    if loss is not None:
+        metrics["test_loss"] = loss
+    ppl = _first_float(r"\bPerplexity:\s*([-+]?\d+(?:\.\d+)?(?:e[-+]?\d+)?)", plain)
+    if ppl is not None:
+        metrics["test_ppl"] = ppl
+    tokens = _first_float(r"\bTokens:\s*([-+]?\d+(?:\.\d+)?(?:e[-+]?\d+)?)", plain)
+    if tokens is not None:
+        metrics["test_tokens"] = tokens
+    rewards = re.search(
+        r"\bRewards:\s*([-+]?\d+(?:\.\d+)?(?:e[-+]?\d+)?),\s*([-+]?\d+(?:\.\d+)?(?:e[-+]?\d+)?)",
+        plain,
+        flags=re.IGNORECASE,
+    )
+    if rewards:
+        metrics["test_chosen_reward"] = float(rewards.group(1))
+        metrics["test_rejected_reward"] = float(rewards.group(2))
+    return metrics
+
 
 def _normalize_spec(spec: dict[str, Any]) -> SimpleNamespace:
     args = dict(CONFIG_DEFAULTS)
     args.update(spec)
+    if args.get("data"):
+        args["data"] = _prepare_local_dataset_for_trainer(str(args["data"]))
     args["train"] = True
     args["config"] = None
     args["optimizer_config"] = args.get("optimizer_config") or {
@@ -341,6 +412,76 @@ def _normalize_spec(spec: dict[str, Any]) -> SimpleNamespace:
     )
 
     return SimpleNamespace(**args)
+
+
+def _prepare_local_dataset_for_trainer(data: str) -> str:
+    """Make Studio synthetic outputs readable by the local JSONL loader.
+
+    The synthetic generators write a human-readable ``output_full.jsonl`` plus
+    HF-style parquet shards under ``data/``. The current local trainer loader
+    only looks for ``train.jsonl`` / ``valid.jsonl`` / ``test.jsonl`` in the
+    selected folder, so previous synthetic runs need a tiny compatibility
+    materialization before fine-tuning can start.
+    """
+
+    data_path = Path(os.path.expanduser(data))
+    if not data_path.exists() or data_path.is_file():
+        return data
+
+    candidate_dirs = []
+    generated_data_dir = data_path / "generated-data"
+    if generated_data_dir.exists():
+        generated_data_splits = generated_data_dir / "data"
+        if generated_data_splits.exists():
+            candidate_dirs.append(generated_data_splits)
+        candidate_dirs.append(generated_data_dir)
+    nested_data_dir = data_path / "data"
+    if nested_data_dir.exists():
+        candidate_dirs.append(nested_data_dir)
+    candidate_dirs.append(data_path)
+
+    for candidate in candidate_dirs:
+        if (candidate / "train.jsonl").exists():
+            return str(candidate)
+
+    for candidate in candidate_dirs:
+        if _materialize_jsonl_splits(candidate):
+            return str(candidate)
+
+    return data
+
+
+def _materialize_jsonl_splits(folder: Path) -> bool:
+    parquet_names = {
+        "train": folder / "train-00000-of-00001.parquet",
+        "valid": folder / "valid-00000-of-00001.parquet",
+        "test": folder / "test-00000-of-00001.parquet",
+    }
+    if parquet_names["train"].exists():
+        try:
+            from datasets import Dataset
+
+            for split, parquet_path in parquet_names.items():
+                if parquet_path.exists():
+                    Dataset.from_parquet(str(parquet_path)).to_json(
+                        str(folder / f"{split}.jsonl"),
+                        orient="records",
+                        lines=True,
+                    )
+            return (folder / "train.jsonl").exists()
+        except Exception as exc:
+            studio_log(f"Could not materialize parquet splits for training: {exc}")
+
+    output_full = folder / "output_full.jsonl"
+    if output_full.exists():
+        train_jsonl = folder / "train.jsonl"
+        if not train_jsonl.exists():
+            train_jsonl.write_text(
+                output_full.read_text(encoding="utf-8"), encoding="utf-8"
+            )
+        return train_jsonl.exists()
+
+    return False
 
 
 def _quantization_config(args: SimpleNamespace) -> dict[str, Any] | None:
@@ -695,7 +836,8 @@ def run(args: SimpleNamespace) -> None:
     mx.random.seed(args.seed)
 
     guard = ResourceGuard()
-    callback: TrainingCallback = StudioCallback(guard=guard)
+    studio_callback = StudioCallback(guard=guard)
+    callback: TrainingCallback = studio_callback
     if getattr(args, "wandb", None):
         callback = WandBCallback(
             project_name=args.wandb,
@@ -777,16 +919,29 @@ def run(args: SimpleNamespace) -> None:
         )
 
         if args.test:
-            studio_log("Evaluating test split")
-            evaluate_model(
-                args=args,
-                model=model,
-                tokenizer=tokenizer,
-                reference_model=reference_model,
-                judge_model=judge_model,
-                judge_tokenizer=judge_tokenizer,
-                test_set=test_set,
-            )
+            test_count = _dataset_len(test_set)
+            if test_count == 0:
+                studio_log("Skipping test split evaluation: no test rows were found.")
+            else:
+                studio_log("Evaluating test split")
+                test_output = TeeCapture()
+                with contextlib.redirect_stdout(
+                    test_output
+                ), contextlib.redirect_stderr(test_output):
+                    evaluate_model(
+                        args=args,
+                        model=model,
+                        tokenizer=tokenizer,
+                        reference_model=reference_model,
+                        judge_model=judge_model,
+                        judge_tokenizer=judge_tokenizer,
+                        test_set=test_set,
+                    )
+                test_metrics = _test_metrics_from_output(
+                    test_output.buffer.getvalue(), args.iters
+                )
+                if len(test_metrics) > 1:
+                    studio_callback.on_test_loss_report(test_metrics)
 
     mx.clear_cache()
     del reference_model, judge_model, judge_tokenizer

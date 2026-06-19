@@ -40,6 +40,12 @@ struct MLXLoRAStudioApp: App {
         }
         .commands {
             CommandGroup(after: .newItem) {
+                // The menu-bar shortcuts mirror the upper-right
+                // toolbar pair, which is now decoupled from the
+                // Synthetic and Upload runners — they always act
+                // on the training runner, because each of those
+                // pages has its own Start / Cancel pill at the
+                // top.
                 Button(commandTitle) {
                     Task { await store.toggleTrainingPlayback() }
                 }
@@ -61,6 +67,7 @@ struct MLXLoRAStudioApp: App {
     }
 
     private var commandTitle: String {
+        // Mirrors the toolbar — always reflects the training runner.
         guard store.trainingRunner.isRunning else {
             return "Start Job"
         }

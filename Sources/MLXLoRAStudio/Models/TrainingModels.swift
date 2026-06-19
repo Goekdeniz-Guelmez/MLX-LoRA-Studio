@@ -105,6 +105,11 @@ enum TrainMode: String, CaseIterable, Identifiable {
         }
     }
 
+    /// The HF dataset we suggest for a fresh run of this algorithm.
+    /// Each default has been picked so the dataset's *first* row already
+    /// contains the field names the trainer's `create_dataset()` looks for
+    /// (see `mlx_lm_lora/trainer/datasets.py`). A wrong default produces a
+    /// `ValueError("Unsupported data format for … training.")` at load time.
     var defaultDataset: String {
         switch self {
         case .sft:
@@ -112,10 +117,18 @@ enum TrainMode: String, CaseIterable, Identifiable {
         case .dpo, .cpo:
             "mlx-community/Human-Like-DPO"
         case .orpo:
+            // ORPO requires `chosen`+`rejected` (no `prompt`). Human-Like-DPO
+            // has `prompt` too, but the DPO examples in the upstream repo
+            // use the flat version which has no `prompt`.
             "mlx-community/Josiefied-Qwen3-dpo-v1-flat"
         case .grpo:
+            // GRPO needs a `prompt` field. gsm8k uses `question`/`answer`
+            // and fails; this reasoning dataset matches the official
+            // `grpo_minimal.ipynb` example.
             "mlx-community/Dolci-Think-RL-7B-2k"
         case .onlineDPO, .xpo, .rlhfReinforce, .ppo:
+            // These modes just need a `prompt` field. Human-Like-DPO has
+            // one and is small enough to load on a laptop.
             "mlx-community/Human-Like-DPO"
         }
     }
@@ -352,6 +365,13 @@ enum SyntheticBackend: String, CaseIterable, Identifiable {
         case .custom: ""
         }
     }
+
+    // The picker used to carry a hand-curated `defaultModel` and
+    // `suggestedModels` for each backend, but those lists drifted
+    // out of date the moment a new model shipped. The picker now
+    // live-scrapes the provider's `/models` endpoint (or Ollama's
+    // `/api/tags`) via `ProviderModelCatalog`, so the dropdown
+    // always reflects what the provider actually has right now.
 }
 
 enum HFModelUploadKind: String, CaseIterable, Identifiable {
@@ -489,7 +509,9 @@ struct TrainingConfig: Equatable {
     var importanceSamplingLevel = ""
     var judgeSystem = ""
     var alpha = "0.00001"
-
+    // Optional column-name overrides for custom datasets. Empty string means
+    // "use the trainer's default for this mode" (prompt / completion /
+    // chosen / rejected / messages / text).
     var promptFeature = ""
     var completionFeature = ""
     var chosenFeature = ""
@@ -582,7 +604,7 @@ struct TrainingConfig: Equatable {
             "seq_step_size": seqStepSize,
             "mask_prompt": maskPrompt,
             "fuse": fuse,
-            "fuse_dequantize": fuseDequantize,
+            "fuse_dequantize": qatEnable ? false : fuseDequantize,
             "fuse_remove_adapters": fuseRemoveAdapters,
             "beta": beta,
             "reward_scaling": rewardScaling,
@@ -687,7 +709,7 @@ struct SyntheticConfig: Equatable {
     var maxConcurrent = 4
     var multiturnPercentile = 0.6
     var humanRoleModel = ""
-    var baseModel = "Qwen/Qwen3-0.6B"
+    var baseModel = "mlx-community/Qwen3-4B-Instruct-2507-4bit"
     var teacherModel = "Goekdeniz-Guelmez/JOSIE-1.1-4B-Instruct"
     var dpoGenerationTarget: SyntheticDPOGenerationTarget = .both
     var outputDir = "./output"
@@ -720,7 +742,9 @@ struct SyntheticConfig: Equatable {
         if baseURL.isEmpty || SyntheticBackend.allCases.map(\.defaultBaseURL).contains(baseURL) {
             baseURL = backend.defaultBaseURL
         }
-
+        // Keep model ids stable across provider changes. The provider picker
+        // still lets the user choose a different id, but auto-clearing here
+        // would also erase ids loaded from previous synthetic run specs.
         let defaultProviderModel = "Goekdeniz-Guelmez/JOSIE-1.1-4B-Instruct"
         if backend == .mlx {
             if model.isEmpty {
@@ -875,9 +899,25 @@ extension SyntheticConfig {
 }
 
 struct TrainingMetric: Identifiable, Equatable, Codable {
+    /// A fresh id is generated on every decode so the encoded form stays
+    /// compact (no UUID noise) but the in-memory copy still satisfies
+    /// `Identifiable` for SwiftUI lists.
     var id: UUID = UUID()
     let step: Int
+    /// Every numeric value parsed from this step's report, keyed by the
+    /// canonical name the UI uses (`loss`, `chosen_r`, `kl`,
+    /// `reward_<name>_mean`, …). Anything not yet seen is just not in the
+    /// dict — the Live Metrics view re-discovers which cards to show on
+    /// every render by inspecting `values.keys`.
+    ///
+    /// Validation values are stored with a `val_` prefix (so a val report
+    /// of `Val loss 1.234` lands as `values["val_loss"]`) and the chart
+    /// code uses that prefix to render them as dashed lines.
     let values: [String: Double]
+    /// The raw line(s) that produced this metric. For an inline trainer
+    /// report it's the single line; for a GRPO block it's the joined
+    /// block. Kept so the "Recent raw lines" strip on the metrics page
+    /// can show what the trainer actually said for the latest step.
     let rawLine: String
 
     init(step: Int, values: [String: Double], rawLine: String) {
@@ -890,11 +930,18 @@ struct TrainingMetric: Identifiable, Equatable, Codable {
     // SFT-style metrics. Live Metrics reads from `values` directly.
     var loss: Double? { values["loss"] }
     var validationLoss: Double? { values["val_loss"] }
+    var testLoss: Double? { values["test_loss"] }
     var learningRate: Double? { values["learning_rate"] ?? values["lr"] }
     var memoryGB: Double? { values["peak_mem"] ?? values["memory"] }
 }
 
 // MARK: - Persisted training metrics (on disk in the run folder)
+
+/// Reads and writes the `metrics.json` file that lives next to every
+/// training run's `run_spec.json`. The file is the canonical record of
+/// what the trainer reported during the run — the live `runner.metrics`
+/// array is in-memory only, so this file is what makes the Runs page
+/// able to show loss curves for runs that finished in previous sessions.
 enum TrainingMetricIO {
     static let filename = "metrics.json"
 
@@ -911,33 +958,59 @@ enum TrainingMetricIO {
         guard let decoded = try? decoder.decode([TrainingMetric].self, from: data) else {
             return []
         }
+        // The runner sometimes emits multiple lines per step that get
+        // merged in insertion order; preserve step order on read so
+        // charts always draw left-to-right in time.
         return decoded.sorted { $0.step < $1.step }
     }
 }
 
 // MARK: - Previous runs (discovered from the output root)
+
+/// A snapshot of a run that has been written to the output root in a
+/// previous session (or earlier in this session). The store loads these
+/// at launch and on demand; the Runs page renders one card per entry.
 struct PersistedRun: Identifiable, Equatable {
     enum Kind: String, Equatable {
+        /// A training run (`run_spec.json` present, `adapters/` populated).
         case training
+        /// A synthetic-data run (not yet decoded — placeholder for parity).
         case synthetic
+        /// A Hugging Face upload (not yet decoded — placeholder for parity).
         case hfUpload
     }
 
+    /// Run folder name, which is unique under the output root and doubles
+    /// as a stable id (the folder can be moved but the id stays with it).
     let id: String
     let folderURL: URL
     let kind: Kind
     let createdAt: Date
+    /// "Qwen3-0.6B · SFT · lora" — built from the decoded spec when
+    /// available, otherwise from the folder name.
     let title: String
+    /// Decoded `run_spec.json` payload. `nil` for non-training runs (and
+    /// for training folders whose spec couldn't be decoded — the card
+    /// still appears so the user can find the folder in Finder).
     let spec: TrainingConfig?
+    /// `metrics.json` contents, sorted by step. Empty for runs that
+    /// never produced a report or for non-training runs.
     let metrics: [TrainingMetric]
+    /// Decoded `synthetic_spec.json` payload. `nil` for training runs
+    /// and for synthetic folders whose spec could not be decoded.
     let syntheticSpec: SyntheticConfig?
+    /// A small bounded preview of generated JSONL records for synthetic
+    /// dataset runs. Empty when no generated data file was found.
     let syntheticSamples: [SyntheticDatasetSample]
+    /// Display string for the on-card subtitle and the detail sheet.
     let command: String
 
     var hasMetrics: Bool { !metrics.isEmpty }
     var hasSpec: Bool { spec != nil }
     var hasSyntheticSpec: Bool { syntheticSpec != nil }
 
+    /// Final train + val loss from the last metric that reported one.
+    /// `nil` when the run never produced a loss sample.
     var finalLoss: Double? { metrics.reversed().compactMap(\.loss).first }
     var finalValidationLoss: Double? { metrics.reversed().compactMap(\.validationLoss).first }
 }
@@ -983,8 +1056,15 @@ struct RunRecord: Identifiable, Equatable {
 struct LocalRunOutput: Identifiable, Equatable {
     let name: String
     let path: String
+    let hasAdapters: Bool
 
     var id: String { path }
+
+    init(name: String, path: String, hasAdapters: Bool = true) {
+        self.name = name
+        self.path = path
+        self.hasAdapters = hasAdapters
+    }
 }
 
 private func appendSpecString(_ spec: inout [String: Any], _ key: String, _ value: String) {
@@ -1021,6 +1101,14 @@ enum RunFolderNamer {
 // MARK: - TrainingConfig JSON decoder
 
 extension TrainingConfig {
+    /// Reconstructs a `TrainingConfig` from a `run_spec.json` payload
+    /// (the file written by `runSpecData(adapterPath:)` for every
+    /// training run). All fields are optional in the input dict — the
+    /// writer only emits a key when it differs from the default — so
+    /// missing keys fall back to the struct's own defaults, which mirror
+    /// the values a fresh `TrainingConfig()` ships with. Fields the
+    /// trainer never persists (`lmStudioName`, `runFolderName`,
+    /// `pythonExecutable`, `workingDirectory`) stay at their defaults.
     init(jsonData: Data) throws {
         guard let object = try JSONSerialization.jsonObject(with: jsonData) as? [String: Any] else {
             throw NSError(
@@ -1033,11 +1121,19 @@ extension TrainingConfig {
         Self.applySpec(object, to: &self)
     }
 
+    /// Convenience: load + decode in one call. Returns `nil` if the
+    /// file is missing or the payload can't be parsed; the caller can
+    /// then decide to skip the run or surface a parse error.
     static func decoded(from specURL: URL) -> TrainingConfig? {
         guard let data = try? Data(contentsOf: specURL) else { return nil }
         return try? Self(jsonData: data)
     }
 
+    /// Reconstruct the "command" string the live `RunRecord` shows, so
+    /// the persisted-run card mirrors the in-memory card's subtitle.
+    /// It's a best-effort display — not what was actually executed
+    /// (the wrapper script is in `Backend/training_runner.py`) but
+    /// close enough for the Runs page.
     var reconstructedCommand: String {
         let adapter = adapterPath.isEmpty ? "adapters" : adapterPath
         var parts = ["python -m mlx_lm_lora train"]
@@ -1083,6 +1179,9 @@ extension TrainingConfig {
         config.numLayers = intValue(spec["num_layers"]) ?? config.numLayers
         config.batchSize = intValue(spec["batch_size"]) ?? config.batchSize
         config.iters = intValue(spec["iters"]) ?? config.iters
+        // The writer sets `epochs` to `NSNull()` when iters is used (and
+        // vice-versa); `intValue` already coerces null to nil, so the
+        // fallback keeps the existing default.
         config.epochs = intValue(spec["epochs"]) ?? config.epochs
         config.gradientAccumulationSteps = intValue(spec["gradient_accumulation_steps"])
             ?? config.gradientAccumulationSteps
@@ -1111,6 +1210,9 @@ extension TrainingConfig {
         config.fuseRemoveAdapters = boolValue(spec["fuse_remove_adapters"]) ?? config.fuseRemoveAdapters
         config.qatEnable = boolValue(spec["qat_enable"]) ?? config.qatEnable
         config.vlmDequantize = boolValue(spec["vlm_dequantize"]) ?? config.vlmDequantize
+        if config.qatEnable {
+            config.fuseDequantize = false
+        }
 
         // Floats
         config.beta = doubleValue(spec["beta"]) ?? config.beta
@@ -1162,7 +1264,9 @@ extension TrainingConfig {
         else if let v = spec["load_in_8bits"] as? Bool, v { config.quantization = .eightBit }
         else if let v = spec["load_in_mxfp4"] as? Bool, v { config.quantization = .mxfp4 }
 
-        // LoRA parameters (rank/scale/dropout) live in a sub-dict;
+        // LoRA parameters (rank/scale/dropout) live in a sub-dict; the
+        // writer also emits the flat keys, but those duplicate the
+        // lora_parameters values, so we read from the sub-dict first.
         if let lora = spec["lora_parameters"] as? [String: Any] {
             config.rank = intValue(lora["rank"]) ?? config.rank
             config.scale = doubleValue(lora["scale"]) ?? config.scale
@@ -1172,6 +1276,8 @@ extension TrainingConfig {
         config.scale = doubleValue(spec["scale"]) ?? config.scale
         config.dropout = doubleValue(spec["dropout"]) ?? config.dropout
 
+        // Learning-rate schedule. The writer emits a dict like
+        // `{name, warmup, warmup_init, arguments: [lr, {iters_fraction}, lr_final]}`.
         if let schedule = spec["lr_schedule"] as? [String: Any],
            let name = schedule["name"] as? String,
            let kind = LearningRateScheduleKind(rawValue: name) {

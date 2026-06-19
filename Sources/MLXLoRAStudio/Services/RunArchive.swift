@@ -1,5 +1,19 @@
 import Foundation
 
+/// Discovers previous training runs from the output root on disk. Each
+/// run is a folder written by `PythonJobRunner.makeRunFolder` that
+/// contains a `run_spec.json` (the `TrainingConfig` payload) and,
+/// since the metrics-persistence change, a `metrics.json` file.
+///
+/// The scanner is intentionally tolerant:
+/// - A folder without a recognisable spec is skipped (it was never a
+///   training run — e.g. a synthetic-data folder).
+/// - A folder with a `run_spec.json` we can't decode still shows up on
+///   the Runs page (so the user can find it in Finder), but with
+///   `spec == nil` and an empty metrics array.
+/// - The scanner is nonisolated so callers can hop off the main actor
+///   for the directory walk (one `contentsOfDirectory` per subdir, no
+///   async filesystem APIs needed).
 enum RunArchive {
     enum DeleteError: LocalizedError {
         case outsideOutputRoot
@@ -12,6 +26,10 @@ enum RunArchive {
         }
     }
 
+    /// Walk the output root, decode every Studio run, and return a
+    /// newest-first list. Training folders get metrics and training
+    /// settings; synthetic folders get their dataset-generation config
+    /// plus a small JSONL preview.
     static func discoverPersistedRuns(outputRoot: String) -> [PersistedRun] {
         let expandedRoot = NSString(string: outputRoot).expandingTildeInPath
         let rootURL = URL(fileURLWithPath: expandedRoot, isDirectory: true)
@@ -102,11 +120,18 @@ enum RunArchive {
     }
 
     // MARK: - Per-folder builder
+
+    /// Build a `PersistedRun` for a single folder. Returns `nil` if the
+    /// folder is clearly not a Studio run (no spec file at all).
     private static func run(at folderURL: URL) -> PersistedRun? {
         let name = folderURL.lastPathComponent
         let createdAt = (try? folderURL.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate)
             ?? Date.distantPast
 
+        // Detect the kind by which spec file is present. Training
+        // folders always have `run_spec.json`; synthetic folders have
+        // `synthetic_spec.json` and usually a generated-data JSONL file
+        // we can preview without loading the whole dataset.
         let trainingSpec = folderURL.appending(path: "run_spec.json")
         let syntheticSpec = folderURL.appending(path: "synthetic_spec.json")
         let hfUploadSpec = folderURL.appending(path: "hf_upload_spec.json")
@@ -137,6 +162,7 @@ enum RunArchive {
             syntheticSamples = readSyntheticSamples(in: folderURL)
             command = "python -m mlx_lm_lora synthetic_data …"
         } else {
+            // Not a Studio run folder — bail.
             return nil
         }
 
@@ -151,6 +177,8 @@ enum RunArchive {
                 .map(String.init) ?? spec.model
             title = "\(spec.trainMode.title) · \(spec.trainType.title) · \(modelName)"
         } else {
+            // Fall back to a humanised folder name for runs we can't
+            // decode fully.
             title = humaniseFolderName(name, kind: kind)
         }
 
@@ -241,7 +269,8 @@ enum RunArchive {
 
     private static func sampleFields(from object: [String: Any]) -> [SyntheticSampleField] {
         let priority = [
-            "prompt", "completion", "chosen", "rejected", "messages", "question", "answer", "text", "system", "source"
+            "prompt", "completion", "chosen", "rejected", "messages",
+            "question", "answer", "text", "system", "source"
         ]
         var fields: [SyntheticSampleField] = []
         var seen = Set<String>()
@@ -306,6 +335,8 @@ enum RunArchive {
         return Int(prefix)
     }
 
+    /// `synthetic-sft-ultrafeedback-prompts-flat-rlhf-2026-05-19-124511` →
+    /// `Synthetic SFT · 2026-05-19 12:45`
     private static func humaniseFolderName(_ name: String, kind: PersistedRun.Kind) -> String {
         let prefix: String
         switch kind {
