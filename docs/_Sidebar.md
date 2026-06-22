@@ -1,15 +1,18 @@
-**MLX-LoRA-Studio**
+**MLX LoRA Studio**
 
 - [Home](Home)
 
 **Guides**
 
-- [Synthetic Dataset Generation](SYNTHETIC_DATASET_GENERATION)
-- [SFT Training](SFT_TRAINING)
-- [ORPO Training](ORPO_TRAINING)
-- [GRPO Training](GRPO_TRAINING)
-- [RLHF Training](RLHF_TRAINING)
+- [Train](Train)
+- [Live Metrics](Live-Metrics)
+- [Synthetic Data](Synthetic-Data)
+- [Upload to HF](Upload-to-HF)
+- [Algorithm Guide](Algorithm-Guide)
+- [Runs](Runs)
+- [Settings & Onboarding](Settings-and-Onboarding)
 
 ---
 
 - [Repository](https://github.com/Goekdeniz-Guelmez/MLX-LoRA-Studio)
+- [mlx-lm-lora](https://github.com/Goekdeniz-Guelmez/mlx-lm-lora)
