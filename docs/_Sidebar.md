@@ -2,7 +2,28 @@
 
 - [Home](Home)
 
-**Guides**
+**Algorithms**
+
+- [SFT](SFT)
+- [DPO](DPO)
+- [CPO](CPO)
+- [ORPO](ORPO)
+- [GRPO](GRPO)
+- [Online DPO](Online-DPO)
+- [XPO](XPO)
+- [RLHF-REINFORCE](RLHF-Reinforce)
+- [PPO](PPO)
+
+**Adaptation & foundations**
+
+- [LoRA](LoRA)
+- [DoRA](DoRA)
+- [Full fine-tuning](Full-Fine-Tuning)
+- [QLoRA](QLoRA)
+- [QAT](QAT)
+- [Optimizers](Optimizers)
+
+**App sections**
 
 - [Train](Train)
 - [Live Metrics](Live-Metrics)
