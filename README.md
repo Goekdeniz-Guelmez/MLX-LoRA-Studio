@@ -68,6 +68,8 @@ trainer into a native macOS workflow for Apple Silicon: pick a model, choose a d
 select an algorithm, watch live training metrics, manage previous runs, generate synthetic
 data, and publish adapters to Hugging Face without leaving the app.
 
+If you need detialed and longer explanations for the algorythms used, then visit the [wiki](https://goekdeniz-guelmez.github.io/MLX-LoRA-Studio/) page.
+
 ### What's included
 
 - **Native macOS app for Apple Silicon** built with SwiftUI and AppKit.
@@ -94,17 +96,6 @@ data, and publish adapters to Hugging Face without leaving the app.
   trainer resources.
 - **MIT-licensed source code** so the community can inspect, modify, improve, and build on
   the project.
-
-### First-release note
-
-This is v1.0.0, so the project is now public and usable end to end, but it is still the
-first public release. Please expect fast iteration around packaging, notarization, model
-coverage, and UX polish. Bug reports, reproducible training failures, and small focused PRs
-are very welcome.
-
-If macOS complains on first launch, run the quarantine command shown at the top of this
-README after installing the app into `/Applications`. That warning is about distribution
-signing/quarantine, not about malicious behavior.
 
 ---
 
