@@ -74,7 +74,7 @@ Orthogonal to the loss: which tensors are trainable, how gradients become update
 - [QAT](QAT) — Quantization-Aware Training; train the adapter as if it will be deployed quantised.
 
 **Optimizers**
-- [Optimizers](Optimizers) — Adam, AdamW, Muon.
+- [Optimizers](Optimizers) — Adam, AdamW, Muon, ... .
 
 ## App sections
 
