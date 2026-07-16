@@ -65,7 +65,7 @@ struct ContentView: View {
         case .metrics:
             LiveMetricsView(runner: store.trainingRunner)
         case .synthetic:
-            SyntheticDataView(store: store)
+            RunsView(store: store)
         case .upload:
             HFUploadView(store: store)
         case .guide:

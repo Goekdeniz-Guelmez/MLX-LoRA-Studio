@@ -182,9 +182,9 @@ private struct OnboardingStep {
         ),
         OnboardingStep(
             title: "Create data when you need it",
-            message: "Synthetic Data helps generate SFT or preference examples, then Runs keeps local outputs organized so you can inspect or resume later.",
-            symbol: "sparkles",
-            section: .synthetic,
+            message: "Runs keeps local outputs organized so you can inspect settings, compare metrics, or resume training later.",
+            symbol: "chart.xyaxis.line",
+            section: .runs,
             cornerRadius: 18,
             rect: { size in
                 let sidebarWidth = min(280, size.width * 0.34)

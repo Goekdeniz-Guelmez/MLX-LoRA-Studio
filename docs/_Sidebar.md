@@ -5,7 +5,9 @@
 **Algorithms**
 
 - [SFT](SFT)
+- [Dynamic fine-tuning](Dynamic-Fine-Tuning)
 - [DPO](DPO)
+- [FTPO](FTPO)
 - [CPO](CPO)
 - [ORPO](ORPO)
 - [GRPO](GRPO)
@@ -27,7 +29,6 @@
 
 - [Train](Train)
 - [Live Metrics](Live-Metrics)
-- [Synthetic Data](Synthetic-Data)
 - [Upload to HF](Upload-to-HF)
 - [Algorithm Guide](Algorithm-Guide)
 - [Runs](Runs)

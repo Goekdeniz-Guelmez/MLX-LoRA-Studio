@@ -4,6 +4,39 @@ import Testing
 
 @Suite("Training Config")
 struct TrainingConfigTests {
+    @Test("mlx-lm-lora 3.0 settings round trip through run specs")
+    func versionThreeSettingsRoundTrip() throws {
+        var config = TrainingConfig()
+        config.trainMode = .ftpo
+        config.sftLossType = .dft
+        config.lambdaMSETarget = 0.06
+        config.tauMSETarget = 1.2
+        config.lambdaMSE = 0.3
+        config.clipEpsilonLogits = 1.5
+        config.ftpoContextFeature = "context"
+        config.ftpoRejectedFeature = "bad_token"
+        config.ftpoChosenFeature = "good_tokens"
+        config.datasetSystemPrompt = "You are a careful assistant."
+
+        let url = FileManager.default.temporaryDirectory
+            .appending(path: UUID().uuidString)
+            .appendingPathExtension("json")
+        try config.runSpecData().write(to: url)
+        defer { try? FileManager.default.removeItem(at: url) }
+
+        let restored = try #require(TrainingConfig.decoded(from: url))
+        #expect(restored.trainMode == .ftpo)
+        #expect(restored.sftLossType == .dft)
+        #expect(restored.lambdaMSETarget == 0.06)
+        #expect(restored.tauMSETarget == 1.2)
+        #expect(restored.lambdaMSE == 0.3)
+        #expect(restored.clipEpsilonLogits == 1.5)
+        #expect(restored.ftpoContextFeature == "context")
+        #expect(restored.ftpoRejectedFeature == "bad_token")
+        #expect(restored.ftpoChosenFeature == "good_tokens")
+        #expect(restored.datasetSystemPrompt == "You are a careful assistant.")
+    }
+
     @Test("VLM settings are written to the run spec")
     func vlmSettingsAreWrittenToRunSpec() throws {
         var config = TrainingConfig()

@@ -1002,6 +1002,13 @@ private struct SettingsGrid: View {
                     row("Reward scaling", String(format: "%.2f", spec.rewardScaling))
                 }
             }
+        case .ftpo:
+            settingsGroup("FTPO") {
+                row("Target MSE λ", String(format: "%.3f", spec.lambdaMSETarget))
+                row("Target MSE τ", String(format: "%.3f", spec.tauMSETarget))
+                row("Non-target MSE λ", String(format: "%.3f", spec.lambdaMSE))
+                row("Logit clip ε", String(format: "%.3f", spec.clipEpsilonLogits))
+            }
         case .grpo:
             settingsGroup("GRPO") {
                 row("Group size", "\(spec.groupSize)")
@@ -1017,7 +1024,7 @@ private struct SettingsGrid: View {
                 row("Min-p", String(format: "%.2f", spec.minP))
             }
         case .sft:
-            EmptyView()
+            settingsGroup("SFT") { row("Loss", spec.sftLossType.title) }
         }
     }
 

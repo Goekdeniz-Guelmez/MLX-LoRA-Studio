@@ -9,6 +9,7 @@ from unittest import mock
 TRAINERS = [
     ("cpo_trainer", "CPOTrainingArgs", "train_cpo", "cpo"),
     ("dpo_trainer", "DPOTrainingArgs", "train_dpo", "dpo"),
+    ("ftpo_trainer", "FTPOTrainingArgs", "train_ftpo", "ftpo"),
     ("grpo_trainer", "GRPOTrainingArgs", "train_grpo", "grpo"),
     ("online_dpo_trainer", "OnlineDPOTrainingArgs", "train_online_dpo", "online_dpo"),
     ("orpo_trainer", "ORPOTrainingArgs", "train_orpo", "orpo"),
@@ -112,7 +113,12 @@ def install_training_runner_stubs():
         "beta": 0.1,
         "reward_scaling": 1.0,
         "dpo_cpo_loss_type": "sigmoid",
+        "sft_loss_type": "nll",
         "delta": 50.0,
+        "lambda_mse_target": 0.05,
+        "tau_mse_target": 1.0,
+        "lambda_mse": 0.4,
+        "clip_epsilon_logits": 2.0,
         "reference_model_path": None,
         "judge": "judge-model",
         "judge_system": "",
@@ -203,6 +209,25 @@ def load_training_runner():
 
 
 class TrainingRunnerTests(unittest.TestCase):
+    def test_system_prompt_fallback_only_fills_missing_or_empty_values(self):
+        runner, _stubs = load_training_runner()
+        rows = [
+            {"prompt": "one", "system": "Keep me"},
+            {"prompt": "two", "system": "  "},
+            {"prompt": "three"},
+            {"prompt": "four", "system": None},
+        ]
+
+        wrapped = runner._SystemPromptFallbackDataset(
+            rows, "system", "Use this fallback"
+        )
+
+        self.assertEqual(wrapped[0]["system"], "Keep me")
+        self.assertEqual(wrapped[1]["system"], "Use this fallback")
+        self.assertEqual(wrapped[2]["system"], "Use this fallback")
+        self.assertEqual(wrapped[3]["system"], "Use this fallback")
+        self.assertNotIn("system", rows[2])
+
     def test_normalize_spec_defaults_to_text_family(self):
         runner, _stubs = load_training_runner()
 
@@ -219,7 +244,13 @@ class TrainingRunnerTests(unittest.TestCase):
 
     def test_every_training_algorithm_dispatches_to_its_pipeline(self):
         expected_extra_args = {
-            "sft": {},
+            "sft": {"loss_type": "dft"},
+            "ftpo": {
+                "lambda_mse_target": 0.06,
+                "tau_mse_target": 1.2,
+                "lambda_mse": 0.3,
+                "clip_epsilon_logits": 1.5,
+            },
             "dpo": {
                 "beta": 0.2,
                 "loss_type": "ipo",
@@ -314,7 +345,12 @@ class TrainingRunnerTests(unittest.TestCase):
                         "beta": 0.2,
                         "reward_scaling": 1.5,
                         "dpo_cpo_loss_type": "ipo",
+                        "sft_loss_type": "dft",
                         "delta": 7.0,
+                        "lambda_mse_target": 0.06,
+                        "tau_mse_target": 1.2,
+                        "lambda_mse": 0.3,
+                        "clip_epsilon_logits": 1.5,
                         "reference_model_path": "ref-model",
                         "judge": "judge-model",
                         "judge_system": "pick the clearer answer",
@@ -340,7 +376,7 @@ class TrainingRunnerTests(unittest.TestCase):
                 stubs.trainer_calls[mode].assert_called_once()
                 call = stubs.trainer_calls[mode].call_args.kwargs
                 training_args = call["args"]
-                for key, value in {
+                common_args = {
                     "batch_size": 2,
                     "iters": 5,
                     "val_batches": 0,
@@ -350,13 +386,19 @@ class TrainingRunnerTests(unittest.TestCase):
                     "max_seq_length": 256,
                     "grad_checkpoint": True,
                     "gradient_accumulation_steps": 3,
-                    "qat_enable": True,
-                    "qat_bits": 4,
-                    "qat_group_size": 32,
-                    "qat_mode": "affine",
-                    "qat_start_step": 2,
-                    "qat_interval": 5,
-                }.items():
+                }
+                if mode != "ftpo":
+                    common_args.update(
+                        {
+                            "qat_enable": True,
+                            "qat_bits": 4,
+                            "qat_group_size": 32,
+                            "qat_mode": "affine",
+                            "qat_start_step": 2,
+                            "qat_interval": 5,
+                        }
+                    )
+                for key, value in common_args.items():
                     self.assertEqual(getattr(training_args, key), value)
 
                 if mode in {"sft", "dpo", "cpo", "orpo"}:

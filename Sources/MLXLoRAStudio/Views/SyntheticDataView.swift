@@ -214,11 +214,13 @@ private struct SyntheticSourceSection: View {
                 }
             }
             if config.backend != .mlx {
+                if config.backend == .custom {
+                    CustomProviderPicker(config: $config, store: store)
+                }
                 TextField("Base URL", text: $config.baseURL)
-                SyntheticProviderKeyField(
-                    store: store,
-                    backend: config.backend
-                )
+                if config.backend != .custom || config.customProviderID == nil {
+                    SyntheticProviderKeyField(store: store, backend: config.backend)
+                }
                 if config.kind == .sft {
                     ToggleRow("Generate multi-turn conversations", isOn: $config.multiturn)
                 }
@@ -241,6 +243,60 @@ private struct SyntheticSourceSection: View {
         .formBlock()
         .animation(.easeInOut(duration: 0.2), value: config.kind)
         .animation(.easeInOut(duration: 0.2), value: config.backend)
+    }
+}
+
+private struct CustomProviderPicker: View {
+    @Binding var config: SyntheticConfig
+    @Bindable var store: AppStore
+    @State private var name = ""
+    @State private var baseURL = ""
+    @State private var apiKey = ""
+    @State private var isCreating = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Picker("Saved provider", selection: Binding(
+                get: { config.customProviderID },
+                set: { selectProvider($0) }
+            )) {
+                Text("Unsaved custom provider").tag(UUID?.none)
+                ForEach(store.customProviders) { provider in
+                    Text(provider.name).tag(Optional(provider.id))
+                }
+            }
+            .pickerStyle(.menu)
+
+            DisclosureGroup("New custom provider", isExpanded: $isCreating) {
+                VStack(alignment: .leading, spacing: 8) {
+                    TextField("Provider name", text: $name)
+                    TextField("Base URL", text: $baseURL)
+                    SecureField("API key", text: $apiKey)
+                    Button("Save Provider") {
+                        guard let provider = store.saveCustomProvider(
+                            name: name,
+                            baseURL: baseURL,
+                            apiKey: apiKey
+                        ) else { return }
+                        selectProvider(provider.id)
+                        name = ""
+                        baseURL = ""
+                        apiKey = ""
+                        isCreating = false
+                    }
+                    .disabled(name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ||
+                              URL(string: baseURL.trimmingCharacters(in: .whitespacesAndNewlines))?.scheme == nil)
+                }
+                .padding(.top, 8)
+            }
+        }
+    }
+
+    private func selectProvider(_ id: UUID?) {
+        config.customProviderID = id
+        guard let provider = store.customProviders.first(where: { $0.id == id }) else { return }
+        config.backend = .custom
+        config.baseURL = provider.baseURL
     }
 }
 

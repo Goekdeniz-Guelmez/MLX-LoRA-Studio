@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import contextlib
+import importlib
 import io
 import json
 import math
@@ -32,6 +33,7 @@ from mlx_lm_lora.train import (
 from mlx_lm_lora.trainer.cpo_trainer import CPOTrainingArgs, train_cpo
 from mlx_lm_lora.trainer.datasets import CacheDataset, load_dataset
 from mlx_lm_lora.trainer.dpo_trainer import DPOTrainingArgs, train_dpo
+from mlx_lm_lora.trainer.ftpo_trainer import FTPOTrainingArgs, train_ftpo
 from mlx_lm_lora.trainer.grpo_reward_functions import (
     get_default_reward_functions,
     get_reward_function,
@@ -57,7 +59,9 @@ from mlx_lm_lora.utils import (
     save_to_lmstudio_merged,
 )
 
-REFERENCE_MODES = {"dpo", "grpo", "online_dpo", "ppo", "rlhf_reinforce", "xpo"}
+datasets_module = importlib.import_module("mlx_lm_lora.trainer.datasets")
+
+REFERENCE_MODES = {"dpo", "ftpo", "grpo", "online_dpo", "ppo", "rlhf_reinforce", "xpo"}
 JUDGE_MODES = {"online_dpo", "ppo", "rlhf_reinforce", "xpo"}
 STUDIO_OUT = sys.stdout
 OPTIMIZER_CLASSES = {
@@ -414,6 +418,52 @@ def _normalize_spec(spec: dict[str, Any]) -> SimpleNamespace:
     return SimpleNamespace(**args)
 
 
+class _SystemPromptFallbackDataset:
+    """Present a non-empty system field without mutating source rows."""
+
+    def __init__(self, data: Any, system_key: str, fallback: str) -> None:
+        self._data = data
+        self._system_key = system_key
+        self._fallback = fallback
+
+    def __len__(self) -> int:
+        return len(self._data)
+
+    def __getitem__(self, index: int) -> Any:
+        row = self._data[index]
+        if not isinstance(row, dict):
+            return row
+        value = row.get(self._system_key)
+        if value is not None and str(value).strip():
+            return row
+        updated = dict(row)
+        updated[self._system_key] = self._fallback
+        return updated
+
+    def __iter__(self):
+        for index in range(len(self)):
+            yield self[index]
+
+
+def _load_dataset_with_system_fallback(args, tokenizer):
+    fallback = str(getattr(args, "dataset_system_prompt", "") or "").strip()
+    if not fallback or not hasattr(datasets_module, "create_dataset"):
+        return load_dataset(args, tokenizer)
+
+    original_create_dataset = datasets_module.create_dataset
+
+    def create_dataset_with_fallback(data, active_tokenizer, config):
+        system_key = getattr(config, "system_feature", None) or "system"
+        wrapped = _SystemPromptFallbackDataset(data, system_key, fallback)
+        return original_create_dataset(wrapped, active_tokenizer, config)
+
+    datasets_module.create_dataset = create_dataset_with_fallback
+    try:
+        return load_dataset(args, tokenizer)
+    finally:
+        datasets_module.create_dataset = original_create_dataset
+
+
 def _prepare_local_dataset_for_trainer(data: str) -> str:
     """Make Studio synthetic outputs readable by the local JSONL loader.
 
@@ -591,12 +641,43 @@ def run_sft(
         model=model,
         args=SFTTrainingArgs(
             **_base_training_kwargs(args, adapter_file),
+            loss_type=args.sft_loss_type,
             seq_step_size=_seq_step(args),
             **_qat_kwargs(args),
         ),
         optimizer=opt,
         train_dataset=train_set,
         val_dataset=valid_set,
+        training_callback=callback,
+    )
+
+
+def run_ftpo(
+    args,
+    model,
+    _tokenizer,
+    ref_model,
+    _judge_model,
+    _judge_tokenizer,
+    opt,
+    train_set,
+    valid_set,
+    adapter_file,
+    callback,
+):
+    train_ftpo(
+        model=model,
+        ref_model=ref_model,
+        optimizer=opt,
+        train_dataset=train_set,
+        val_dataset=valid_set,
+        args=FTPOTrainingArgs(
+            **_base_training_kwargs(args, adapter_file),
+            lambda_mse_target=args.lambda_mse_target,
+            tau_mse_target=args.tau_mse_target,
+            lambda_mse=args.lambda_mse,
+            clip_epsilon_logits=args.clip_epsilon_logits,
+        ),
         training_callback=callback,
     )
 
@@ -821,6 +902,7 @@ def run_online_family(
 PIPELINES = {
     "sft": run_sft,
     "dpo": run_dpo,
+    "ftpo": run_ftpo,
     "cpo": run_cpo,
     "orpo": run_orpo,
     "grpo": run_grpo,
@@ -884,7 +966,9 @@ def run(args: SimpleNamespace) -> None:
         guard.check("loading the judge model")
 
         studio_log("Loading datasets")
-        train_raw, valid_raw, test_raw = load_dataset(args, tokenizer)
+        train_raw, valid_raw, test_raw = _load_dataset_with_system_fallback(
+            args, tokenizer
+        )
         train_set = CacheDataset(train_raw)
         valid_set = CacheDataset(valid_raw)
         test_set = CacheDataset(test_raw)

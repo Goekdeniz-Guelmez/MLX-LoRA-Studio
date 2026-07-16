@@ -40,11 +40,12 @@ struct TrainingView: View {
                             .environment(store)
                         OutputSection(config: $store.training, outputRoot: store.outputRoot, lastRunFolder: store.trainingRunner.lastRunFolder)
                         CoreTrainingSection(config: $store.training)
+                        FTPOSection(config: $store.training)
                         PreferenceSection(config: $store.training)
                         GRPOSection(config: $store.training)
                         OnlinePreferenceSection(config: $store.training)
-                        DatasetMappingSection(config: $store.training)
                         QATSection(config: $store.training)
+                        DatasetMappingSection(config: $store.training)
                     }
                     .padding(24)
                 }
@@ -346,6 +347,18 @@ private struct CoreTrainingSection: View {
                 NumberField("Sequence step size", value: $config.seqStepSize)
             }
             ToggleRow("Mask prompt loss", isOn: $config.maskPrompt)
+            if config.trainMode == .sft {
+                Picker("SFT loss", selection: $config.sftLossType) {
+                    ForEach(SFTLossType.allCases) { loss in Text(loss.title).tag(loss) }
+                }
+                Text(config.sftLossType == .dft
+                     ? "Dynamic fine-tuning down-weights already-confident tokens and concentrates learning on difficult tokens."
+                     : config.sftLossType == .chunkedNLL
+                     ? "Chunked NLL bounds peak memory by computing vocabulary loss in chunks."
+                     : "Standard next-token negative log-likelihood.")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+            }
             ToggleRow(config.modelFamily == .visionLanguage ? "Export full VLM after training" : "Fuse merged model after training", isOn: $config.fuse)
             if config.fuse, config.modelFamily == .text {
                 ToggleRow("Dequantize merged model", isOn: $config.fuseDequantize)
@@ -365,6 +378,31 @@ private struct CoreTrainingSection: View {
     }
 }
 
+private struct FTPOSection: View {
+    @Binding var config: TrainingConfig
+
+    var body: some View {
+        if config.trainMode == .ftpo {
+            VStack(alignment: .leading, spacing: 14) {
+                SectionTitle("FTPO / Antidoom")
+                Text("Use a Hugging Face dataset or local JSONL data containing context_with_chat_template, rejected_decoded, and multi_chosen_decoded.")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                HStack {
+                    FloatingField("Target MSE λ", value: $config.lambdaMSETarget)
+                    FloatingField("Target MSE τ", value: $config.tauMSETarget)
+                }
+                HStack {
+                    FloatingField("Non-target MSE λ", value: $config.lambdaMSE)
+                    FloatingField("Logit clip ε", value: $config.clipEpsilonLogits)
+                }
+                TextField("Reference model path (optional)", text: $config.referenceModelPath)
+            }
+            .formBlock()
+        }
+    }
+}
+
 private struct PreferenceSection: View {
     @Binding var config: TrainingConfig
 
@@ -379,6 +417,7 @@ private struct PreferenceSection: View {
         // ORPO) and GRPO still use Beta / Delta / Loss below.
         let mode = config.trainMode
         if mode != .sft
+            && mode != .ftpo
             && mode != .onlineDPO
             && mode != .xpo
             && mode != .ppo
@@ -606,6 +645,13 @@ private struct DatasetMappingSection: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             SectionTitle("Dataset Columns")
+            if config.trainMode == .ftpo {
+                TextField("Context", text: $config.ftpoContextFeature)
+                HStack {
+                    TextField("Rejected", text: $config.ftpoRejectedFeature)
+                    TextField("Multiple chosen", text: $config.ftpoChosenFeature)
+                }
+            }
             HStack {
                 TextField("Prompt", text: $config.promptFeature)
                 TextField("Completion", text: $config.completionFeature)
@@ -623,6 +669,12 @@ private struct DatasetMappingSection: View {
                 TextField("Answer", text: $config.answerFeature)
                 TextField("Type", text: $config.typeFeature)
             }
+            TextField(
+                "Fallback system prompt (used when the system field is missing or empty)",
+                text: $config.datasetSystemPrompt,
+                axis: .vertical
+            )
+            .lineLimit(2...6)
             TextField("Preference score", text: $config.preferenceScoreFeature)
         }
         .formBlock()

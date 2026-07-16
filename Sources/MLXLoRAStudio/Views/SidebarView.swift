@@ -114,7 +114,7 @@ struct SidebarView: View {
 
 private extension SidebarSection {
     static var primarySections: [SidebarSection] {
-        allCases.filter { $0 != .about }
+        allCases.filter { $0 != .about && $0 != .synthetic }
     }
 }
 

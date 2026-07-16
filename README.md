@@ -41,7 +41,6 @@
 - [A guided tour of the app](#a-guided-tour-of-the-app)
   - [Train](#train)
   - [Live Metrics](#live-metrics)
-  - [Synthetic Data](#synthetic-data)
   - [Upload to HF](#upload-to-hf)
   - [Algorithm Guide](#algorithm-guide)
   - [Runs](#runs)
@@ -65,8 +64,8 @@
 
 This release turns the underlying [`mlx-lm-lora`](https://github.com/Goekdeniz-Guelmez/mlx-lm-lora)
 trainer into a native macOS workflow for Apple Silicon: pick a model, choose a dataset,
-select an algorithm, watch live training metrics, manage previous runs, generate synthetic
-data, and publish adapters to Hugging Face without leaving the app.
+select an algorithm, watch live training metrics, manage previous runs, and publish adapters
+to Hugging Face without leaving the app.
 
 If you need detialed and longer explanations for the algorythms used, then visit the [wiki](https://goekdeniz-guelmez.github.io/MLX-LoRA-Studio/) page.
 
@@ -74,16 +73,15 @@ If you need detialed and longer explanations for the algorythms used, then visit
 
 - **Native macOS app for Apple Silicon** built with SwiftUI and AppKit.
 - **Fully local fine-tuning workflow** for MLX-compatible language models.
-- **9 training algorithms:** SFT, DPO, CPO, ORPO, GRPO, Online DPO, XPO, RLHF Reinforce,
+- **10 training algorithms:** SFT, DPO, FTPO, CPO, ORPO, GRPO, Online DPO, XPO, RLHF Reinforce,
   and PPO.
+- **Dynamic SFT objectives:** NLL, memory-bounded Chunked NLL, and Dynamic Fine-Tuning.
 - **Multiple training modes:** LoRA, DoRA, QLoRA at 4/6/8-bit, full fine-tuning, and
   Quantization-Aware Training (QAT).
 - **Live training observability** with loss, learning rate, gradient norm, throughput,
   progress, logs, and recent-step charts.
 - **Memory-aware run planning** with live wired/active memory monitoring and ResourceGuard
   checks before launch.
-- **Synthetic data generation** for prompts, SFT pairs, and DPO preference triples using
-  local models.
 - **Runs archive** for configs, logs, adapters, run status, resume flows, Finder reveal,
   and upload handoff.
 - **Hugging Face upload flow** with repository settings, model-card metadata, token handling,
@@ -110,7 +108,7 @@ exists to make that loop feel like using a normal Mac app:**
   metrics, the runs archive, and the export to Hugging Face.
 - **Local, on-device, private.** Your prompts, your model, your weights, your disk. No data
   leaves your Mac unless you choose to push it to the Hub at the end.
-- **Real algorithms, not toy versions.** SFT, DPO, CPO, ORPO, GRPO, Online DPO, XPO,
+- **Real algorithms, not toy versions.** SFT, DPO, FTPO, CPO, ORPO, GRPO, Online DPO, XPO,
   RLHF Reinforce, PPO — with QLoRA, DoRA, full fine-tuning, and **Quantization-Aware Training (QAT)**.
 - **Built for everyone.** A beginner can ship a LoRA-tuned Llama model on their M-series Mac
   without writing a line of code. An ML researcher can drop into the YAML config and pin
@@ -130,7 +128,7 @@ exists to make that loop feel like using a normal Mac app:**
   Python training pipeline (also developed by the author of this app), with a few
   Swift-side services around it: environment discovery, live memory monitoring, the
   ResourceGuard that keeps the GPU from being driven into swap, run archival, and HF upload.
-- A **complete workflow** — train, watch live metrics, generate synthetic data, push the
+- A **complete workflow** — train, watch live metrics, push the
   resulting adapter to the Hub — without leaving the window.
 
 ## What it isn't
@@ -148,8 +146,9 @@ exists to make that loop feel like using a normal Mac app:**
 
 ### 🧠 Training
 
-- **9 training algorithms** out of the box: SFT, DPO, CPO, ORPO, GRPO, Online DPO, XPO,
+- **10 training algorithms** out of the box: SFT, DPO, FTPO, CPO, ORPO, GRPO, Online DPO, XPO,
   RLHF Reinforce, PPO. Pick by use case, not by which one is wired up.
+- **Selectable SFT losses:** NLL, Chunked NLL for lower peak memory, and DFT for emphasizing difficult tokens.
 - **LoRA, DoRA, QLoRA (4/6/8-bit), full fine-tuning, and QAT** (Quantization-Aware Training
   for SFT/DPO/ORPO) — the same training surface as the underlying `mlx-lm-lora` CLI.
 - **Adapter resume** — point a new run at an existing adapter checkpoint and Studio picks
@@ -167,16 +166,6 @@ exists to make that loop feel like using a normal Mac app:**
   estimate of what the *current configuration* should cost.
 - **Run progress bar** in the sidebar while a job is in flight.
 - **Pause / resume / stop** from the toolbar without losing the run.
-
-### 🧪 Synthetic data
-
-- **Prompt generation** from a base model — describe the distribution you want and let
-  the model propose prompts.
-- **SFT pair generation** with a teacher model — synthetic prompt/completion pairs.
-- **DPO preference generation** with a base + judge model — synthetic chosen / rejected
-  pairs.
-- **Preview & export** — browse the generated dataset in the app, then export to JSONL
-  for any of the training tabs.
 
 ### 🚀 Publish
 
@@ -296,21 +285,6 @@ A second-by-second view of what the runner is doing:
 - Throughput (tokens/sec) and elapsed time.
 - A scrolling console of the last lines of stdout/stderr from the Python job, for when
   something looks off and you want to read the underlying trace.
-
-### Synthetic Data
-
-<p align="center">
-  <img src="Sources/Media/app_symthetic_data.png" alt="MLX LoRA Studio" width="100%">
-</p>
-
-Three sub-modes, all driven by local models:
-
-- **Prompts** — base model proposes prompts matching a topic + distribution.
-- **SFT** — teacher model writes (prompt, completion) pairs.
-- **DPO** — base + judge produce (prompt, chosen, rejected) triples.
-
-Outputs are written as JSONL, previewed in-app, and ready to feed straight back into
-the **Train** tab.
 
 ### Upload to HF
 

@@ -8,7 +8,7 @@
 
 **Supervised fine-tuning (SFT)** trains the model to maximise the log-probability it assigns to a completion, given a prompt. Every example is a `(prompt, completion)` pair (or a chat-style `messages` list, or a raw `text` blob). Prompt tokens are masked out so the loss only counts the answer.
 
-In `mlx-lm-lora` the SFT trainer is the substrate that every other algorithm reuses. The cross-entropy / NLL loss, gradient checkpointing, KV-cache handling, QAT hooks, and the sequence-chunked efficient-long-context forward pass all live in `sft_trainer.py`. Every preference and RL algorithm inherits those mechanics and only swaps the loss function and (sometimes) the dataset format.
+In `mlx-lm-lora` the SFT trainer is the substrate that every other algorithm reuses. Version 3.0.0 offers NLL, memory-bounded Chunked NLL, and [Dynamic Fine-Tuning](Dynamic-Fine-Tuning) objectives. Gradient checkpointing, KV-cache handling, QAT hooks, and the sequence-chunked efficient-long-context forward pass also live in `sft_trainer.py`.
 
 ## Intuition
 
