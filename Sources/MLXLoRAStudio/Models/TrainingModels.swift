@@ -103,7 +103,7 @@ enum TrainMode: String, CaseIterable, Identifiable {
         switch self {
         case .sft: "Default: mlx-community/JOSIE-v2-Instruct-5K"
         case .dpo, .cpo: "Default: mlx-community/Human-Like-DPO"
-        case .ftpo: "Hugging Face or local Antidoom dataset"
+        case .ftpo: "Default: mlx-community/gemma-3-27b-it-antislop-ftpo-preference-dataset"
         case .orpo: "Default: mlx-community/Josiefied-Qwen3-dpo-v1-flat"
         case .grpo: "Default: mlx-community/Dolci-Think-RL-7B-2k"
         case .onlineDPO, .xpo, .rlhfReinforce, .ppo: "Default: mlx-community/Human-Like-DPO"
@@ -122,7 +122,7 @@ enum TrainMode: String, CaseIterable, Identifiable {
         case .dpo, .cpo:
             "mlx-community/Human-Like-DPO"
         case .ftpo:
-            "data/"
+            "mlx-community/gemma-3-27b-it-antislop-ftpo-preference-dataset"
         case .orpo:
             // ORPO requires `chosen`+`rejected` (no `prompt`). Human-Like-DPO
             // has `prompt` too, but the DPO examples in the upstream repo
