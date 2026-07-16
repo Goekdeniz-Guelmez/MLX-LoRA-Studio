@@ -16,7 +16,7 @@ enum SidebarSection: String, CaseIterable, Identifiable {
         switch self {
         case .train: "Train"
         case .metrics: "Live Metrics"
-        case .synthetic: "Synthetic Data"
+        case .synthetic: "Synthetic Data (Legacy)"
         case .upload: "Upload to HF"
         case .guide: "Algorithm Guide"
         case .runs: "Runs"
@@ -40,6 +40,7 @@ enum SidebarSection: String, CaseIterable, Identifiable {
 enum TrainMode: String, CaseIterable, Identifiable {
     case sft
     case dpo
+    case ftpo
     case cpo
     case orpo
     case grpo
@@ -54,6 +55,7 @@ enum TrainMode: String, CaseIterable, Identifiable {
         switch self {
         case .sft: "SFT"
         case .dpo: "DPO"
+        case .ftpo: "FTPO"
         case .cpo: "CPO"
         case .orpo: "ORPO"
         case .grpo: "GRPO"
@@ -67,7 +69,7 @@ enum TrainMode: String, CaseIterable, Identifiable {
     var family: String {
         switch self {
         case .sft: "Supervised"
-        case .dpo, .cpo, .orpo: "Preference"
+        case .dpo, .ftpo, .cpo, .orpo: "Preference"
         case .grpo, .onlineDPO, .xpo, .rlhfReinforce, .ppo: "RL / Online"
         }
     }
@@ -78,6 +80,8 @@ enum TrainMode: String, CaseIterable, Identifiable {
             "Learns from prompt/completion or chat examples. Best first step for style, domain, and instruction following."
         case .dpo:
             "Optimizes chosen responses over rejected responses using a frozen reference model."
+        case .ftpo:
+            "Repairs reasoning doom loops by optimizing the final-token distribution from Antidoom preference rows."
         case .cpo:
             "Preference optimization without a separate reference model path in the main loop."
         case .orpo:
@@ -99,6 +103,7 @@ enum TrainMode: String, CaseIterable, Identifiable {
         switch self {
         case .sft: "Default: mlx-community/JOSIE-v2-Instruct-5K"
         case .dpo, .cpo: "Default: mlx-community/Human-Like-DPO"
+        case .ftpo: "Hugging Face or local Antidoom dataset"
         case .orpo: "Default: mlx-community/Josiefied-Qwen3-dpo-v1-flat"
         case .grpo: "Default: mlx-community/Dolci-Think-RL-7B-2k"
         case .onlineDPO, .xpo, .rlhfReinforce, .ppo: "Default: mlx-community/Human-Like-DPO"
@@ -116,6 +121,8 @@ enum TrainMode: String, CaseIterable, Identifiable {
             "mlx-community/JOSIE-v2-Instruct-5K"
         case .dpo, .cpo:
             "mlx-community/Human-Like-DPO"
+        case .ftpo:
+            "data/"
         case .orpo:
             // ORPO requires `chosen`+`rejected` (no `prompt`). Human-Like-DPO
             // has `prompt` too, but the DPO examples in the upstream repo
@@ -135,7 +142,7 @@ enum TrainMode: String, CaseIterable, Identifiable {
 
     var needsReference: Bool {
         switch self {
-        case .dpo, .grpo, .onlineDPO, .xpo, .rlhfReinforce, .ppo: true
+        case .dpo, .ftpo, .grpo, .onlineDPO, .xpo, .rlhfReinforce, .ppo: true
         case .sft, .cpo, .orpo: false
         }
     }
@@ -143,7 +150,7 @@ enum TrainMode: String, CaseIterable, Identifiable {
     var needsJudge: Bool {
         switch self {
         case .onlineDPO, .xpo, .rlhfReinforce, .ppo: true
-        case .sft, .dpo, .cpo, .orpo, .grpo: false
+        case .sft, .dpo, .ftpo, .cpo, .orpo, .grpo: false
         }
     }
 
@@ -151,6 +158,21 @@ enum TrainMode: String, CaseIterable, Identifiable {
         switch self {
         case .sft, .dpo, .orpo: true
         default: false
+        }
+    }
+}
+
+enum SFTLossType: String, CaseIterable, Identifiable {
+    case nll
+    case chunkedNLL = "chunked_nll"
+    case dft
+
+    var id: String { rawValue }
+    var title: String {
+        switch self {
+        case .nll: "NLL"
+        case .chunkedNLL: "Chunked NLL"
+        case .dft: "Dynamic Fine-Tuning"
         }
     }
 }
@@ -374,6 +396,12 @@ enum SyntheticBackend: String, CaseIterable, Identifiable {
     // always reflects what the provider actually has right now.
 }
 
+struct CustomProvider: Codable, Equatable, Identifiable {
+    let id: UUID
+    var name: String
+    var baseURL: String
+}
+
 enum HFModelUploadKind: String, CaseIterable, Identifiable {
     case adaptersOnly
     case mergedWeights
@@ -454,6 +482,7 @@ struct TrainingConfig: Equatable {
     var runFolderName = ""
     var lmStudioName = ""
     var trainMode: TrainMode = .sft
+    var sftLossType: SFTLossType = .nll
     var trainType: TrainType = .lora
     var quantization: Quantization = .fourBit
     var optimizer: OptimizerKind = .adamw
@@ -491,6 +520,10 @@ struct TrainingConfig: Equatable {
     var rewardScaling = 1.0
     var dpoCpoLossType = "sigmoid"
     var delta = 50.0
+    var lambdaMSETarget = 0.05
+    var tauMSETarget = 1.0
+    var lambdaMSE = 0.4
+    var clipEpsilonLogits = 2.0
     var referenceModelPath = ""
     var judgeKind: JudgeKind = .llm
     var judge = "Qwen/Qwen3-0.6B"
@@ -584,6 +617,7 @@ struct TrainingConfig: Equatable {
             "train": true,
             "train_type": trainType.rawValue,
             "train_mode": trainMode.rawValue,
+            "sft_loss_type": sftLossType.rawValue,
             "optimizer": optimizer.rawValue,
             "data": data,
             "seed": seed,
@@ -610,6 +644,10 @@ struct TrainingConfig: Equatable {
             "reward_scaling": rewardScaling,
             "dpo_cpo_loss_type": dpoCpoLossType,
             "delta": delta,
+            "lambda_mse_target": lambdaMSETarget,
+            "tau_mse_target": tauMSETarget,
+            "lambda_mse": lambdaMSE,
+            "clip_epsilon_logits": clipEpsilonLogits,
             "group_size": groupSize,
             "epsilon": epsilon,
             "max_completion_length": maxCompletionLength,
@@ -700,6 +738,7 @@ struct SyntheticConfig: Equatable {
 
     var kind: SyntheticKind = .sft
     var backend: SyntheticBackend = .mlx
+    var customProviderID: UUID?
     var datasetPath = SyntheticKind.sft.defaultDataset
     var model = "Goekdeniz-Guelmez/JOSIE-1.1-4B-Instruct"
     var baseURL = ""
@@ -1231,6 +1270,11 @@ extension TrainingConfig {
 
         // Strings (and stringified numerics that the writer always emits as strings)
         if let v = spec["dpo_cpo_loss_type"] as? String { config.dpoCpoLossType = v }
+        if let v = spec["sft_loss_type"] as? String, let loss = SFTLossType(rawValue: v) { config.sftLossType = loss }
+        config.lambdaMSETarget = doubleValue(spec["lambda_mse_target"]) ?? config.lambdaMSETarget
+        config.tauMSETarget = doubleValue(spec["tau_mse_target"]) ?? config.tauMSETarget
+        config.lambdaMSE = doubleValue(spec["lambda_mse"]) ?? config.lambdaMSE
+        config.clipEpsilonLogits = doubleValue(spec["clip_epsilon_logits"]) ?? config.clipEpsilonLogits
         if let v = spec["grpo_loss_type"] as? String { config.grpoLossType = v }
         if let v = spec["epsilon_high"] as? String { config.epsilonHigh = v }
         if let v = spec["reward_weights"] as? String { config.rewardWeights = v }

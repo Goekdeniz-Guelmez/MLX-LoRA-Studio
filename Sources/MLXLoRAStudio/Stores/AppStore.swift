@@ -130,6 +130,7 @@ final class AppStore {
     // UI shows "••• set" or "Paste key…" based on the flag, never the
     // value, mirroring the Hugging Face token field pattern.
     var syntheticProviderKeyIsSet: [SyntheticBackend: Bool] = [:]
+    var customProviders: [CustomProvider] = []
 
     private enum DefaultsKey {
         static let selectedPythonPath = "selectedPythonPath"
@@ -138,6 +139,7 @@ final class AppStore {
         static let customModelPaths = "customModelPaths"
         static let customDatasetPaths = "customDatasetPaths"
         static let customSystemPrompts = "customSystemPrompts"
+        static let customProviders = "customProviders"
         static let completionNotificationsEnabled = "completionNotificationsEnabled"
         static let resourceGuardMemoryPercent = "resourceGuardMemoryPercent"
         static let iogpuWiredLimitMB = "iogpuWiredLimitMB"
@@ -159,6 +161,9 @@ final class AppStore {
         // token above.
         static func syntheticAccount(for backend: SyntheticBackend) -> String {
             "synthetic-\(backend.rawValue)-api-key"
+        }
+        static func customProviderAccount(for id: UUID) -> String {
+            "synthetic-custom-\(id.uuidString)-api-key"
         }
     }
 
@@ -189,6 +194,10 @@ final class AppStore {
             customSystemPrompts = savedSystemPrompts
                 .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
                 .filter { !$0.isEmpty }
+        }
+        if let data = defaults.data(forKey: DefaultsKey.customProviders),
+           let savedProviders = try? JSONDecoder().decode([CustomProvider].self, from: data) {
+            customProviders = savedProviders
         }
         if defaults.object(forKey: DefaultsKey.completionNotificationsEnabled) != nil {
             completionNotificationsEnabled = defaults.bool(forKey: DefaultsKey.completionNotificationsEnabled)
@@ -343,6 +352,67 @@ final class AppStore {
     func clearSyntheticProviderKey(for backend: SyntheticBackend) {
         deleteSyntheticProviderKey(for: backend)
         syntheticProviderKeyIsSet[backend] = false
+    }
+
+    func saveCustomProvider(name: String, baseURL: String, apiKey: String) -> CustomProvider? {
+        let cleanName = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        let cleanURL = baseURL.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !cleanName.isEmpty, URL(string: cleanURL)?.scheme != nil else { return nil }
+        let provider = CustomProvider(id: UUID(), name: cleanName, baseURL: cleanURL)
+        customProviders.append(provider)
+        persistCustomProviders()
+        writeSecret(apiKey.trimmingCharacters(in: .whitespacesAndNewlines), account: KeychainKey.customProviderAccount(for: provider.id))
+        synthetic.backend = .custom
+        synthetic.customProviderID = provider.id
+        synthetic.baseURL = provider.baseURL
+        return provider
+    }
+
+    func selectCustomProvider(_ id: UUID?) {
+        synthetic.customProviderID = id
+        guard let provider = customProviders.first(where: { $0.id == id }) else { return }
+        synthetic.backend = .custom
+        synthetic.baseURL = provider.baseURL
+    }
+
+    func customProviderKey(for id: UUID?) -> String? {
+        guard let id else { return nil }
+        return readSecret(account: KeychainKey.customProviderAccount(for: id))
+    }
+
+    private func persistCustomProviders() {
+        guard let data = try? JSONEncoder().encode(customProviders) else { return }
+        UserDefaults.standard.set(data, forKey: DefaultsKey.customProviders)
+    }
+
+    private func readSecret(account: String) -> String? {
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: KeychainKey.service,
+            kSecAttrAccount as String: account,
+            kSecReturnData as String: true,
+            kSecMatchLimit as String: kSecMatchLimitOne
+        ]
+        var item: AnyObject?
+        guard SecItemCopyMatching(query as CFDictionary, &item) == errSecSuccess,
+              let data = item as? Data else { return nil }
+        return String(data: data, encoding: .utf8)
+    }
+
+    private func writeSecret(_ secret: String, account: String) {
+        guard !secret.isEmpty else { return }
+        let data = Data(secret.utf8)
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: KeychainKey.service,
+            kSecAttrAccount as String: account
+        ]
+        let attrs = [kSecValueData as String: data]
+        if SecItemUpdate(query as CFDictionary, attrs as CFDictionary) == errSecItemNotFound {
+            var item = query
+            item[kSecValueData as String] = data
+            SecItemAdd(item as CFDictionary, nil)
+        }
     }
 
     private func readSyntheticProviderKey(for backend: SyntheticBackend) -> String? {
@@ -508,7 +578,9 @@ final class AppStore {
             // subprocess's env dict. A non-empty value the user typed
             // into the form (`synthetic.apiKey`) overrides the saved
             // key — see `PythonJobRunner.startSynthetic`.
-            let savedKey = syntheticProviderKey(for: synthetic.backend)
+            let savedKey = synthetic.backend == .custom
+                ? customProviderKey(for: synthetic.customProviderID)
+                : syntheticProviderKey(for: synthetic.backend)
             let command = try await syntheticRunner.startSynthetic(
                 config: synthetic,
                 pythonExecutable: pythonExecutable,
@@ -867,7 +939,9 @@ final class AppStore {
         // request, so the secret is in memory for the minimum
         // possible time. We don't retain it in any stored
         // property — the scraper reads it, sends it, and forgets.
-        let key = syntheticProviderKey(for: backend)
+        let key = backend == .custom
+            ? customProviderKey(for: synthetic.customProviderID)
+            : syntheticProviderKey(for: backend)
         let baseURL = synthetic.baseURL
 
         do {

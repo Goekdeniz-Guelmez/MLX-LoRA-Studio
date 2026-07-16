@@ -2,7 +2,7 @@
 
 **A native Mac app for LLM fine-tuning on Apple Silicon — fully on-device, fully open source.**
 
-MLX LoRA Studio turns fine-tuning into a normal Mac workflow: pick a model, choose a dataset, select an algorithm, watch live training metrics, generate synthetic data, and publish adapters to Hugging Face — without leaving the window, and without your data ever leaving your Mac.
+MLX LoRA Studio turns fine-tuning into a normal Mac workflow: pick a model, choose a dataset, select an algorithm, watch live training metrics, and publish adapters to Hugging Face — without leaving the window, and without your data ever leaving your Mac.
 
 It is a graphical front-end to the [`mlx-lm-lora`](https://github.com/Goekdeniz-Guelmez/mlx-lm-lora) Python training pipeline, vendored at `vendor/mlx-lm-lora/`, so what runs in the GUI is exactly what you can run from the CLI.
 
@@ -16,7 +16,8 @@ It is a graphical front-end to the [`mlx-lm-lora`](https://github.com/Goekdeniz-
 ## Features at a glance
 
 ### 🧠 Training
-- **9 training algorithms:** SFT, DPO, CPO, ORPO, GRPO, Online DPO, XPO, RLHF Reinforce, and PPO.
+- **10 training algorithms:** SFT, DPO, FTPO, CPO, ORPO, GRPO, Online DPO, XPO, RLHF Reinforce, and PPO.
+- **mlx-lm-lora 3.0.0 SFT losses:** NLL, memory-bounded Chunked NLL, and Dynamic Fine-Tuning.
 - **5 adapter / training modes:** LoRA, DoRA, QLoRA (4/6/8-bit), full fine-tuning, and **Quantization-Aware Training (QAT)**.
 - **10 optimizers selectable** (Adam, AdamW, Muon documented; plus SGD, RMSprop, Adagrad, AdaDelta, Adamax, Lion, Adafactor).
 - **Adapter resume** — continue from an existing checkpoint.
@@ -80,7 +81,7 @@ Orthogonal to the loss: which tensors are trainable, how gradients become update
 
 Pages mirroring the app's sidebar:
 
-- [Train](Train) · [Live Metrics](Live-Metrics) · [Synthetic Data](Synthetic-Data) · [Upload to HF](Upload-to-HF) · [Algorithm Guide](Algorithm-Guide) · [Runs](Runs) · [Settings & Onboarding](Settings-and-Onboarding)
+- [Train](Train) · [Live Metrics](Live-Metrics) · [Upload to HF](Upload-to-HF) · [Algorithm Guide](Algorithm-Guide) · [Runs](Runs) · [Settings & Onboarding](Settings-and-Onboarding)
 
 ## See also
 

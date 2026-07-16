@@ -32,6 +32,7 @@ from mlx_lm_lora.train import (
 from mlx_lm_lora.trainer.cpo_trainer import CPOTrainingArgs, train_cpo
 from mlx_lm_lora.trainer.datasets import CacheDataset, load_dataset
 from mlx_lm_lora.trainer.dpo_trainer import DPOTrainingArgs, train_dpo
+from mlx_lm_lora.trainer.ftpo_trainer import FTPOTrainingArgs, train_ftpo
 from mlx_lm_lora.trainer.grpo_reward_functions import (
     get_default_reward_functions,
     get_reward_function,
@@ -57,7 +58,7 @@ from mlx_lm_lora.utils import (
     save_to_lmstudio_merged,
 )
 
-REFERENCE_MODES = {"dpo", "grpo", "online_dpo", "ppo", "rlhf_reinforce", "xpo"}
+REFERENCE_MODES = {"dpo", "ftpo", "grpo", "online_dpo", "ppo", "rlhf_reinforce", "xpo"}
 JUDGE_MODES = {"online_dpo", "ppo", "rlhf_reinforce", "xpo"}
 STUDIO_OUT = sys.stdout
 OPTIMIZER_CLASSES = {
@@ -591,12 +592,43 @@ def run_sft(
         model=model,
         args=SFTTrainingArgs(
             **_base_training_kwargs(args, adapter_file),
+            loss_type=args.sft_loss_type,
             seq_step_size=_seq_step(args),
             **_qat_kwargs(args),
         ),
         optimizer=opt,
         train_dataset=train_set,
         val_dataset=valid_set,
+        training_callback=callback,
+    )
+
+
+def run_ftpo(
+    args,
+    model,
+    _tokenizer,
+    ref_model,
+    _judge_model,
+    _judge_tokenizer,
+    opt,
+    train_set,
+    valid_set,
+    adapter_file,
+    callback,
+):
+    train_ftpo(
+        model=model,
+        ref_model=ref_model,
+        optimizer=opt,
+        train_dataset=train_set,
+        val_dataset=valid_set,
+        args=FTPOTrainingArgs(
+            **_base_training_kwargs(args, adapter_file),
+            lambda_mse_target=args.lambda_mse_target,
+            tau_mse_target=args.tau_mse_target,
+            lambda_mse=args.lambda_mse,
+            clip_epsilon_logits=args.clip_epsilon_logits,
+        ),
         training_callback=callback,
     )
 
@@ -821,6 +853,7 @@ def run_online_family(
 PIPELINES = {
     "sft": run_sft,
     "dpo": run_dpo,
+    "ftpo": run_ftpo,
     "cpo": run_cpo,
     "orpo": run_orpo,
     "grpo": run_grpo,

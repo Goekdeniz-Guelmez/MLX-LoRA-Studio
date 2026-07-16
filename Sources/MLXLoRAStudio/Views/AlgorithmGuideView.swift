@@ -46,7 +46,7 @@ struct AlgorithmGuideView: View {
         VStack(alignment: .leading, spacing: 10) {
             Text("How to read this page")
                 .font(.headline)
-            Text("The mlx-lm-lora package ships nine training algorithms, grouped into three families: **supervised** (SFT), **preference** (DPO, CPO, ORPO), and **reinforcement / online** (GRPO, Online DPO, XPO, RLHF-REINFORCE, PPO). Tapping a card in **Training loops** below opens its full wiki article.")
+            Text("mlx-lm-lora 3.0.0 ships ten training algorithms, grouped into three families: **supervised** (SFT), **preference** (DPO, FTPO, CPO, ORPO), and **reinforcement / online** (GRPO, Online DPO, XPO, RLHF-REINFORCE, PPO). Tapping a card in **Training loops** below opens its full wiki article.")
                 .fixedSize(horizontal: false, vertical: true)
             Text("Under **Foundations** you will find the four pieces that are orthogonal to the choice of loss: the **adaptation method** that decides which tensors are trainable (LoRA / DoRA / full), the **optimizer** that turns gradients into updates (Adam, AdamW, Muon), the **load-time quantisation** of the base model (4 / 6 / 8 / MXFP4 bit), and **Quantization-Aware Training** that simulates a quantised forward pass so the trained adapter survives deployment quantisation.")
                 .fixedSize(horizontal: false, vertical: true)
@@ -273,6 +273,12 @@ private struct AlgorithmArticle: View {
 
             The reference is normally the base model you started from. Loading a different one (e.g. an instruction-tuned SFT checkpoint) shifts the implicit reward baseline and is a common knob for steering the resulting behaviour.
             """
+        case .ftpo:
+            """
+            **Final Token Preference Optimisation (FTPO)** repairs reasoning doom loops using Antidoom examples. Instead of optimizing whole responses, it compares the policy and a frozen reference at the next-token distribution after a supplied context, raises probability for several acceptable next tokens, and suppresses the rejected token.
+
+            Two MSE regularizers limit unwanted drift in target and non-target logits, making FTPO a focused repair pass rather than a general preference-tuning method.
+            """
         case .cpo:
             """
             **CPO (Contrastive Preference Optimisation)** is DPO with the reference term dropped. The chosen-rejected log-prob gap is compared against an absolute target instead of a relative one — which means the policy can move further from the base model without a reference forward pass. It is faster to train and uses less memory, at the cost of being more sensitive to the `beta`/`delta` knobs.
@@ -326,6 +332,12 @@ private struct AlgorithmArticle: View {
             • DPO is derived from the closed-form solution of the KL-constrained RL objective, so the loss is mathematically equivalent to RLHF with a learned reward model — but you skip the reward model entirely.
             • The implicit reward is `β · log(π_θ(chosen) / π_ref(chosen)) − β · log(π_θ(rejected) / π_ref(rejected))`. A larger `β` makes the loss more aggressive, a smaller one softer.
             • `loss_type = "sigmoid"` is the original DPO; `hinge` is a margin-style loss; `ipo` regularises toward a constant target (more robust to noise); `dpop` adds an explicit reference-drift penalty scaled by `delta`.
+            """
+        case .ftpo:
+            """
+            • Each row provides the full chat-templated context, one rejected continuation, and one or more acceptable continuations.
+            • FTPO updates the next-token distribution only, so it targets the exact branch where a reasoning loop begins.
+            • The frozen reference and MSE terms protect unrelated vocabulary logits from drifting.
             """
         case .cpo:
             """
@@ -402,6 +414,14 @@ private struct AlgorithmArticle: View {
                 equations: [
                     "logits  =  ( log π_θ(*y*₍c₎|*x*)  −  log π_θ(*y*₍r₎|*x*) )  −  ( log π_ref(*y*₍c₎|*x*)  −  log π_ref(*y*₍r₎|*x*) )",
                     "**ℒ**₍DPO₎   =  − log σ( β · logits )                                                  (sigmoid)\n=  max( 0,  1 − β · logits )                                                (hinge)\n=  ( logits − 1 ⁄ (2β) )²                                                  (ipo)\n=  − log σ( β · logits )  +  δ · max( 0,  log π_ref(*y*₍c₎|*x*) − log π_θ(*y*₍c₎|*x*) )    (dpop)",
+                ]
+            )
+        case .ftpo:
+            return (
+                prose: "FTPO combines a clipped preference loss over chosen-versus-rejected next-token logits with MSE penalties against the frozen reference distribution.",
+                equations: [
+                    "Δ = logit_θ(chosen) − logit_θ(rejected)",
+                    "ℒ_FTPO = softplus(ε − Δ) · clip((ε − Δ) / ε, 0, 1) + λ_mse MSE_non-target + λ_target MSE_target"
                 ]
             )
         case .cpo:
@@ -601,6 +621,15 @@ private struct AlgorithmArticle: View {
                       explanation: "Column-name overrides for the preference schema."),
             ]
 
+        case .ftpo:
+            return [
+                .init(setting: "lambda_mse_target", defaultValue: "0.05", explanation: "Penalty for excessive drift on chosen and rejected target logits."),
+                .init(setting: "tau_mse_target", defaultValue: "1.0", explanation: "Allowed absolute target-logit drift before the target MSE penalty activates."),
+                .init(setting: "lambda_mse", defaultValue: "0.4", explanation: "Penalty that keeps all non-target vocabulary logits close to the reference."),
+                .init(setting: "clip_epsilon_logits", defaultValue: "2.0", explanation: "Preference margin and clipping threshold in logit space; must be positive."),
+                .init(setting: "reference_model_path", defaultValue: "—", explanation: "Frozen reference model; empty uses a frozen copy of the base model."),
+            ]
+
         case .cpo:
             return [
                 .init(setting: "beta", defaultValue: "0.1",
@@ -747,6 +776,10 @@ private struct AlgorithmArticle: View {
 
             The bundled default is `mlx-community/Human-Like-DPO`, which has the prompt/chosen/rejected shape.
             """
+        case .ftpo:
+            """
+            FTPO accepts a Hugging Face dataset repository or local Antidoom JSONL files (`train.jsonl`, optionally `valid.jsonl` and `test.jsonl`). Every row must contain `context_with_chat_template`, `rejected_decoded`, and `multi_chosen_decoded`. The final field contains one or more acceptable next-token continuations.
+            """
         case .cpo:
             """
             Same as DPO: one row per preference with `chosen` and `rejected`. CPO does not use the `prompt` column.
@@ -787,6 +820,10 @@ private struct AlgorithmArticle: View {
             After SFT, when you have a static preference dataset (UltraFeedback, HelpSteer, Anthropic HH). DPO is the cheapest preference algorithm — one forward pass per completion on the policy, one forward pass on the reference.
 
             Use `loss_type=ipo` if you have noisy or contradictory labels, `loss_type=dpop` if the policy starts drifting from the reference in ways the SFT loss did not catch.
+            """
+        case .ftpo:
+            """
+            Use FTPO for a focused repair pass when a reasoning model repeatedly enters known bad continuation loops and you have generated Antidoom rows identifying the rejected branch and acceptable alternatives. It is not a replacement for broad SFT or DPO alignment.
             """
         case .cpo:
             """
@@ -850,6 +887,13 @@ private struct AlgorithmArticle: View {
                 "Watch `accuracies` and `margins` in the live metrics. `accuracies > 0.7` with `margins > 0` means the loss is doing real work; if `margins` plateaus, raise `beta` slightly.",
                 "If you see NaNs, the most common cause is `loss_type=dpop` with `delta` too large for the current `lr`. Drop `delta` to 10 first.",
                 "`efficient_long_context` applies here too — preference datasets with long answers (e.g. full document diffs) benefit from chunked forward passes.",
+            ]
+        case .ftpo:
+            [
+                "Validate Antidoom field names before a long run; FTPO intentionally does not accept ordinary DPO chosen/rejected rows.",
+                "Start with the upstream defaults and a small learning rate; the MSE terms are designed to make the repair local.",
+                "Keep `clip_epsilon_logits` positive. Lower values stop updating a chosen token after a smaller margin is reached.",
+                "Use the same checkpoint as the Antidoom generation target for the frozen reference unless you deliberately want a different anchor.",
             ]
         case .cpo:
             [
