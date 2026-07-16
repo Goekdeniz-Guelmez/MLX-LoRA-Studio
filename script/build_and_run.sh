@@ -25,6 +25,7 @@ pkill -x "$APP_NAME" >/dev/null 2>&1 || true
 mkdir -p "$DIST_DIR"
 BUILD_BINARY="$DIST_DIR/$APP_NAME"
 swiftc \
+  -default-isolation MainActor \
   "$ROOT_DIR/Sources/MLXLoRAStudio/App/MLXLoRAStudioApp.swift" \
   "$ROOT_DIR/Sources/MLXLoRAStudio/Models/TrainingModels.swift" \
   "$ROOT_DIR/Sources/MLXLoRAStudio/Models/PythonEnvironment.swift" \
