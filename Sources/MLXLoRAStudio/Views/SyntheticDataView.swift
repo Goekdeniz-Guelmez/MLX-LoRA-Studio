@@ -1,5 +1,6 @@
 import SwiftUI
 
+@MainActor
 struct SyntheticDataView: View {
     @Bindable var store: AppStore
 
@@ -78,6 +79,7 @@ struct SyntheticDataView: View {
     }
 }
 
+@MainActor
 private struct SyntheticRunConsolePill: View {
     @Bindable var runner: PythonJobRunner
 
@@ -150,6 +152,7 @@ private struct SyntheticRunConsolePill: View {
     }
 }
 
+@MainActor
 private struct SyntheticSourceSection: View {
     @Binding var config: SyntheticConfig
     @Environment(AppStore.self) private var store
@@ -246,6 +249,7 @@ private struct SyntheticSourceSection: View {
     }
 }
 
+@MainActor
 private struct CustomProviderPicker: View {
     @Binding var config: SyntheticConfig
     @Bindable var store: AppStore
@@ -317,6 +321,7 @@ private struct CustomProviderPicker: View {
 /// The user can always type a model id directly into the text
 /// field — the dropdown is just a convenience. Whatever the user
 /// types is what the trainer receives, scraped list or not.
+@MainActor
 private struct SyntheticProviderModelPicker: View {
     @Binding var text: String
     let backend: SyntheticBackend
@@ -468,6 +473,7 @@ private struct SyntheticProviderModelPicker: View {
 /// above. We force a re-render of the field with `.id(backend)` so a
 /// pending "in edit" state for one provider is discarded the moment
 /// the user picks another provider.
+@MainActor
 private struct SyntheticProviderKeyField: View {
     @Bindable var store: AppStore
     let backend: SyntheticBackend
@@ -559,6 +565,7 @@ private struct SyntheticProviderKeyField: View {
     }
 }
 
+@MainActor
 private struct SyntheticSystemPromptSection: View {
     @Binding var config: SyntheticConfig
 
@@ -574,6 +581,7 @@ private struct SyntheticSystemPromptSection: View {
     }
 }
 
+@MainActor
 private struct SyntheticOutputSection: View {
     @Binding var config: SyntheticConfig
     let outputRoot: String
@@ -637,6 +645,7 @@ private struct SyntheticOutputSection: View {
     }
 }
 
+@MainActor
 private struct SyntheticResumeRunPicker: View {
     @Binding var selection: String
     let outputs: [LocalRunOutput]
@@ -689,6 +698,7 @@ private struct SyntheticResumeRunPicker: View {
     }
 }
 
+@MainActor
 private struct SyntheticSamplingSection: View {
     @Binding var config: SyntheticConfig
 
@@ -750,6 +760,7 @@ private struct SyntheticSamplingSection: View {
     }
 }
 
+@MainActor
 private struct SyntheticSplitSection: View {
     @Binding var config: SyntheticConfig
 
