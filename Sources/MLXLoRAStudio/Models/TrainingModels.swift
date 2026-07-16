@@ -1107,7 +1107,7 @@ struct LocalRunOutput: Identifiable, Equatable {
 
     var id: String { path }
 
-    init(name: String, path: String, hasAdapters: Bool = true) {
+    nonisolated init(name: String, path: String, hasAdapters: Bool = true) {
         self.name = name
         self.path = path
         self.hasAdapters = hasAdapters

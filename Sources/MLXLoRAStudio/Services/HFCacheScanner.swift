@@ -25,7 +25,7 @@ struct HFCachedAsset: Identifiable, Hashable {
     var id: String { "\(kind.rawValue):\(hfID)" }
 }
 
-enum HFCacheScanner {
+nonisolated enum HFCacheScanner {
     /// Returns the user's HF cache root, honouring `HF_HOME` and `HF_HUB_CACHE`
     /// if set, otherwise the standard `~/.cache/huggingface/`.
     static func cacheRoot(fileManager: FileManager = .default) -> URL {

@@ -28,7 +28,7 @@ enum IOGPUWiredLimitService {
         }.value
     }
 
-    private static func appleScriptEscaped(_ value: String) -> String {
+    nonisolated private static func appleScriptEscaped(_ value: String) -> String {
         value
             .replacingOccurrences(of: "\\", with: "\\\\")
             .replacingOccurrences(of: "\"", with: "\\\"")

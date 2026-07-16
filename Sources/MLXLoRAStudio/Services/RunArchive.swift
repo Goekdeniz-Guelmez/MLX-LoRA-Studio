@@ -14,7 +14,7 @@ import Foundation
 /// - The scanner is nonisolated so callers can hop off the main actor
 ///   for the directory walk (one `contentsOfDirectory` per subdir, no
 ///   async filesystem APIs needed).
-enum RunArchive {
+nonisolated enum RunArchive {
     enum DeleteError: LocalizedError {
         case outsideOutputRoot
 

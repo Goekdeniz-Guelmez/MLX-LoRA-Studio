@@ -1,5 +1,5 @@
 import Foundation
-import Dispatch
+@preconcurrency import Dispatch
 
 /// Scans the host system for available Python interpreters — system binaries,
 /// Homebrew, pyenv, uv, conda envs, and project venvs — and returns a deduplicated
@@ -322,8 +322,8 @@ enum PythonEnvironmentDiscovery {
 /// handler. All access is gated by a `DispatchGroup`, so we mark the class
 /// `@unchecked Sendable` to tell the compiler we own the synchronization.
 private final class PipeBuffers: @unchecked Sendable {
-    var stdout = Data()
-    var stderr = Data()
+    nonisolated(unsafe) var stdout = Data()
+    nonisolated(unsafe) var stderr = Data()
 }
 
 private extension String {

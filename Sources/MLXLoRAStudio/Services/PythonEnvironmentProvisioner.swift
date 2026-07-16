@@ -232,6 +232,6 @@ enum PythonEnvironmentProvisioner {
 /// handler. All access is gated by a `DispatchGroup`, so we mark the class
 /// `@unchecked Sendable` to tell the compiler we own the synchronization.
 private final class PipeBuffers: @unchecked Sendable {
-    var stdout = Data()
-    var stderr = Data()
+    nonisolated(unsafe) var stdout = Data()
+    nonisolated(unsafe) var stderr = Data()
 }
