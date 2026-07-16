@@ -105,10 +105,12 @@ struct NumberField: View {
 struct FloatingField: View {
     let title: String
     @Binding var value: Double
+    @State private var text: String
 
     init(_ title: String, value: Binding<Double>) {
         self.title = title
         self._value = value
+        self._text = State(initialValue: Self.format(value.wrappedValue))
     }
 
     var body: some View {
@@ -118,11 +120,34 @@ struct FloatingField: View {
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
                 .minimumScaleFactor(0.8)
-            TextField(title, value: $value, format: .number)
+            TextField(title, text: $text)
                 .textFieldStyle(.roundedBorder)
                 .font(.system(.body, design: .monospaced))
+                .onChange(of: text) { _, newValue in
+                    guard let parsed = Self.parse(newValue) else { return }
+                    value = parsed
+                }
+                .onSubmit {
+                    text = Self.format(value)
+                }
+                .onChange(of: value) { _, newValue in
+                    let formatted = Self.format(newValue)
+                    if formatted != text, Self.parse(text) != newValue {
+                        text = formatted
+                    }
+                }
         }
         .frame(minWidth: 88, maxWidth: .infinity, alignment: .leading)
+    }
+
+    private static func parse(_ text: String) -> Double? {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+        return Double(trimmed)
+    }
+
+    private static func format(_ value: Double) -> String {
+        String(format: "%.16g", value)
     }
 }
 
