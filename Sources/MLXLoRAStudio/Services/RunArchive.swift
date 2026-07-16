@@ -11,10 +11,9 @@ import Foundation
 /// - A folder with a `run_spec.json` we can't decode still shows up on
 ///   the Runs page (so the user can find it in Finder), but with
 ///   `spec == nil` and an empty metrics array.
-/// - The scanner is nonisolated so callers can hop off the main actor
-///   for the directory walk (one `contentsOfDirectory` per subdir, no
-///   async filesystem APIs needed).
-nonisolated enum RunArchive {
+/// - Archive values use the app target's default main-actor isolation.
+///   This keeps decoding and model construction in one isolation domain.
+enum RunArchive {
     enum DeleteError: LocalizedError {
         case outsideOutputRoot
 

@@ -1018,28 +1018,20 @@ final class AppStore {
     }
 
     /// Re-scans the output root for previous runs and replaces
-    /// `persistedRuns` with the result. The disk walk is hoisted off
-    /// the main actor so a large runs folder doesn't stall the UI; the
-    /// assignment is a single `replace-all` so the Runs page sees a
-    /// consistent snapshot, not a half-rendered list.
+    /// `persistedRuns` with the result. Archive decoding shares the app
+    /// target's main-actor isolation, and the single `replace-all` keeps
+    /// the Runs page from seeing a half-rendered list.
     ///
     /// Safe to call repeatedly — the Runs page wires a Refresh button
     /// to it, and `init()` calls it once on launch.
     func refreshPersistedRuns() async {
         isRefreshingPersistedRuns = true
         defer { isRefreshingPersistedRuns = false }
-        let root = outputRoot
-        let runs = await Task.detached(priority: .userInitiated) {
-            RunArchive.discoverPersistedRuns(outputRoot: root)
-        }.value
-        persistedRuns = runs
+        persistedRuns = RunArchive.discoverPersistedRuns(outputRoot: outputRoot)
     }
 
     func deletePersistedRun(_ run: PersistedRun) async throws {
-        let root = outputRoot
-        try await Task.detached(priority: .userInitiated) {
-            try RunArchive.deletePersistedRun(run, outputRoot: root)
-        }.value
+        try RunArchive.deletePersistedRun(run, outputRoot: outputRoot)
         persistedRuns.removeAll { $0.id == run.id }
         await refreshLocalRunOutputs()
     }
@@ -1049,15 +1041,11 @@ final class AppStore {
         isDeletingPersistedRuns = true
         defer { isDeletingPersistedRuns = false }
 
-        let root = outputRoot
-        let deletedIDs = try await Task.detached(priority: .userInitiated) {
-            var deletedIDs: [String] = []
-            for run in runs {
-                try RunArchive.deletePersistedRun(run, outputRoot: root)
-                deletedIDs.append(run.id)
-            }
-            return deletedIDs
-        }.value
+        var deletedIDs: [String] = []
+        for run in runs {
+            try RunArchive.deletePersistedRun(run, outputRoot: outputRoot)
+            deletedIDs.append(run.id)
+        }
 
         persistedRuns.removeAll { deletedIDs.contains($0.id) }
         await refreshLocalRunOutputs()
