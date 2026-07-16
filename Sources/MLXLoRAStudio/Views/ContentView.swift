@@ -62,6 +62,8 @@ struct ContentView: View {
         switch store.selection {
         case .train:
             TrainingView(store: store)
+        case .settingsChat:
+            ChatWithSettingsView(store: store)
         case .metrics:
             LiveMetricsView(runner: store.trainingRunner)
         case .synthetic:

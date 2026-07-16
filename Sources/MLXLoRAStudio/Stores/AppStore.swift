@@ -131,6 +131,10 @@ final class AppStore {
     // value, mirroring the Hugging Face token field pattern.
     var syntheticProviderKeyIsSet: [SyntheticBackend: Bool] = [:]
     var customProviders: [CustomProvider] = []
+    var settingsChatMessages: [SettingsChatMessage] = []
+    var settingsChatModel = "gpt-5-mini"
+    var isSettingsChatResponding = false
+    var settingsChatError = ""
 
     private enum DefaultsKey {
         static let selectedPythonPath = "selectedPythonPath"
@@ -354,6 +358,30 @@ final class AppStore {
         syntheticProviderKeyIsSet[backend] = false
     }
 
+    func sendSettingsChat(_ text: String) async {
+        let message = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !message.isEmpty, !isSettingsChatResponding else { return }
+        guard let apiKey = syntheticProviderKey(for: .openai), !apiKey.isEmpty else {
+            settingsChatError = "Add an OpenAI API key to start chatting."
+            return
+        }
+        settingsChatMessages.append(.init(role: .user, text: message))
+        isSettingsChatResponding = true
+        settingsChatError = ""
+        defer { isSettingsChatResponding = false }
+        do {
+            let result = try await SettingsChatService.respond(messages: settingsChatMessages, config: training, model: settingsChatModel, apiKey: apiKey)
+            var applied: [String] = []
+            for change in result.changes {
+                applied.append(try TrainingSettingsEditor.apply(change, to: &training))
+            }
+            let suffix = applied.isEmpty ? "" : "\n\nApplied: " + applied.joined(separator: ", ")
+            settingsChatMessages.append(.init(role: .assistant, text: result.text + suffix))
+        } catch {
+            settingsChatError = error.localizedDescription
+        }
+    }
+
     func saveCustomProvider(name: String, baseURL: String, apiKey: String) -> CustomProvider? {
         let cleanName = name.trimmingCharacters(in: .whitespacesAndNewlines)
         let cleanURL = baseURL.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -507,7 +535,7 @@ final class AppStore {
             await startSynthetic()
         case .upload:
             await startHFUpload()
-        case .metrics, .guide, .runs, .about:
+        case .metrics, .settingsChat, .guide, .runs, .about:
             break
         }
     }
@@ -714,7 +742,7 @@ final class AppStore {
             hfUploadRunner
         case .metrics:
             trainingRunner
-        case .guide, .runs, .about:
+        case .settingsChat, .guide, .runs, .about:
             nil
         }
     }
@@ -731,7 +759,7 @@ final class AppStore {
         switch selection {
         case .train, .synthetic, .upload:
             true
-        case .metrics, .guide, .runs, .about:
+        case .metrics, .settingsChat, .guide, .runs, .about:
             false
         }
     }
