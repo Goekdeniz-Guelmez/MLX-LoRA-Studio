@@ -362,17 +362,7 @@ final class AppStore {
         customProviders.append(provider)
         persistCustomProviders()
         writeSecret(apiKey.trimmingCharacters(in: .whitespacesAndNewlines), account: KeychainKey.customProviderAccount(for: provider.id))
-        synthetic.backend = .custom
-        synthetic.customProviderID = provider.id
-        synthetic.baseURL = provider.baseURL
         return provider
-    }
-
-    func selectCustomProvider(_ id: UUID?) {
-        synthetic.customProviderID = id
-        guard let provider = customProviders.first(where: { $0.id == id }) else { return }
-        synthetic.backend = .custom
-        synthetic.baseURL = provider.baseURL
     }
 
     func customProviderKey(for id: UUID?) -> String? {

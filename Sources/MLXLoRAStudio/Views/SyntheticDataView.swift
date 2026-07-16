@@ -258,7 +258,7 @@ private struct CustomProviderPicker: View {
         VStack(alignment: .leading, spacing: 8) {
             Picker("Saved provider", selection: Binding(
                 get: { config.customProviderID },
-                set: { store.selectCustomProvider($0) }
+                set: { selectProvider($0) }
             )) {
                 Text("Unsaved custom provider").tag(UUID?.none)
                 ForEach(store.customProviders) { provider in
@@ -273,8 +273,12 @@ private struct CustomProviderPicker: View {
                     TextField("Base URL", text: $baseURL)
                     SecureField("API key", text: $apiKey)
                     Button("Save Provider") {
-                        guard store.saveCustomProvider(name: name, baseURL: baseURL, apiKey: apiKey) != nil else { return }
-                        config = store.synthetic
+                        guard let provider = store.saveCustomProvider(
+                            name: name,
+                            baseURL: baseURL,
+                            apiKey: apiKey
+                        ) else { return }
+                        selectProvider(provider.id)
                         name = ""
                         baseURL = ""
                         apiKey = ""
@@ -286,6 +290,13 @@ private struct CustomProviderPicker: View {
                 .padding(.top, 8)
             }
         }
+    }
+
+    private func selectProvider(_ id: UUID?) {
+        config.customProviderID = id
+        guard let provider = store.customProviders.first(where: { $0.id == id }) else { return }
+        config.backend = .custom
+        config.baseURL = provider.baseURL
     }
 }
 
