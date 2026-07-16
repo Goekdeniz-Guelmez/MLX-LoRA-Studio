@@ -30,7 +30,7 @@
 
 ## Table of contents
 
-- [Release v1.0.0](#release-v100)
+- [Release v2.0.0](#release-v200)
 - [Why MLX LoRA Studio?](#why-mlx-lora-studio)
 - [What it is](#what-it-is)
 - [What it isn't](#what-it-isnt)
@@ -58,14 +58,14 @@
 
 ---
 
-## Release v1.0.0
+## Release v2.0.0
 
-**MLX LoRA Studio v1.0.0 is the first open-source release of the app.**
+**MLX LoRA Studio v2.0.0 updates the app for `mlx-lm-lora` 3.0.0.**
 
-This release turns the underlying [`mlx-lm-lora`](https://github.com/Goekdeniz-Guelmez/mlx-lm-lora)
-trainer into a native macOS workflow for Apple Silicon: pick a model, choose a dataset,
-select an algorithm, watch live training metrics, manage previous runs, and publish adapters
-to Hugging Face without leaving the app.
+This release adds FTPO, Dynamic Fine-Tuning, and memory-bounded Chunked NLL while aligning
+the native training runner and documentation with the `mlx-lm-lora` 3.0.0 API. Synthetic
+dataset creation has been removed from the active app workflow, while historical synthetic
+run folders remain readable in the Runs archive.
 
 If you need detialed and longer explanations for the algorythms used, then visit the [wiki](https://goekdeniz-guelmez.github.io/MLX-LoRA-Studio/) page.
 
