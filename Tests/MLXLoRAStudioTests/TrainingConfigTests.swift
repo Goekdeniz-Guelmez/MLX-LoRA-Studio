@@ -13,6 +13,10 @@ struct TrainingConfigTests {
         config.tauMSETarget = 1.2
         config.lambdaMSE = 0.3
         config.clipEpsilonLogits = 1.5
+        config.ftpoContextFeature = "context"
+        config.ftpoRejectedFeature = "bad_token"
+        config.ftpoChosenFeature = "good_tokens"
+        config.datasetSystemPrompt = "You are a careful assistant."
 
         let url = FileManager.default.temporaryDirectory
             .appending(path: UUID().uuidString)
@@ -27,6 +31,10 @@ struct TrainingConfigTests {
         #expect(restored.tauMSETarget == 1.2)
         #expect(restored.lambdaMSE == 0.3)
         #expect(restored.clipEpsilonLogits == 1.5)
+        #expect(restored.ftpoContextFeature == "context")
+        #expect(restored.ftpoRejectedFeature == "bad_token")
+        #expect(restored.ftpoChosenFeature == "good_tokens")
+        #expect(restored.datasetSystemPrompt == "You are a careful assistant.")
     }
 
     @Test("VLM settings are written to the run spec")

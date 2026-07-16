@@ -209,6 +209,25 @@ def load_training_runner():
 
 
 class TrainingRunnerTests(unittest.TestCase):
+    def test_system_prompt_fallback_only_fills_missing_or_empty_values(self):
+        runner, _stubs = load_training_runner()
+        rows = [
+            {"prompt": "one", "system": "Keep me"},
+            {"prompt": "two", "system": "  "},
+            {"prompt": "three"},
+            {"prompt": "four", "system": None},
+        ]
+
+        wrapped = runner._SystemPromptFallbackDataset(
+            rows, "system", "Use this fallback"
+        )
+
+        self.assertEqual(wrapped[0]["system"], "Keep me")
+        self.assertEqual(wrapped[1]["system"], "Use this fallback")
+        self.assertEqual(wrapped[2]["system"], "Use this fallback")
+        self.assertEqual(wrapped[3]["system"], "Use this fallback")
+        self.assertNotIn("system", rows[2])
+
     def test_normalize_spec_defaults_to_text_family(self):
         runner, _stubs = load_training_runner()
 

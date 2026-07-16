@@ -552,9 +552,13 @@ struct TrainingConfig: Equatable {
     var chatFeature = ""
     var textFeature = ""
     var systemFeature = ""
+    var datasetSystemPrompt = ""
     var preferenceScoreFeature = ""
     var answerFeature = ""
     var typeFeature = ""
+    var ftpoContextFeature = "context_with_chat_template"
+    var ftpoRejectedFeature = "rejected_decoded"
+    var ftpoChosenFeature = "multi_chosen_decoded"
     var qatEnable = false
     var qatBits = 8
     var qatGroupSize = 64
@@ -703,9 +707,13 @@ struct TrainingConfig: Equatable {
         appendSpecString(&spec, "chat_feature", chatFeature)
         appendSpecString(&spec, "text_feature", textFeature)
         appendSpecString(&spec, "system_feature", systemFeature)
+        appendSpecString(&spec, "dataset_system_prompt", datasetSystemPrompt)
         appendSpecString(&spec, "preference_score_feature", preferenceScoreFeature)
         appendSpecString(&spec, "answer_feature", answerFeature)
         appendSpecString(&spec, "type_feature", typeFeature)
+        appendSpecString(&spec, "ftpo_context_feature", ftpoContextFeature)
+        appendSpecString(&spec, "ftpo_rejected_feature", ftpoRejectedFeature)
+        appendSpecString(&spec, "ftpo_chosen_feature", ftpoChosenFeature)
         appendSpecString(&spec, "resume_adapter_file", resumeAdapterFile)
 
         return try JSONSerialization.data(
@@ -1298,9 +1306,13 @@ extension TrainingConfig {
         if let v = spec["chat_feature"] as? String { config.chatFeature = v }
         if let v = spec["text_feature"] as? String { config.textFeature = v }
         if let v = spec["system_feature"] as? String { config.systemFeature = v }
+        if let v = spec["dataset_system_prompt"] as? String { config.datasetSystemPrompt = v }
         if let v = spec["preference_score_feature"] as? String { config.preferenceScoreFeature = v }
         if let v = spec["answer_feature"] as? String { config.answerFeature = v }
         if let v = spec["type_feature"] as? String { config.typeFeature = v }
+        if let v = spec["ftpo_context_feature"] as? String { config.ftpoContextFeature = v }
+        if let v = spec["ftpo_rejected_feature"] as? String { config.ftpoRejectedFeature = v }
+        if let v = spec["ftpo_chosen_feature"] as? String { config.ftpoChosenFeature = v }
 
         // Quantization is encoded as one of four booleans in the spec.
         if let v = spec["load_in_4bits"] as? Bool, v { config.quantization = .fourBit }

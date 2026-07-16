@@ -645,6 +645,13 @@ private struct DatasetMappingSection: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             SectionTitle("Dataset Columns")
+            if config.trainMode == .ftpo {
+                TextField("Context", text: $config.ftpoContextFeature)
+                HStack {
+                    TextField("Rejected", text: $config.ftpoRejectedFeature)
+                    TextField("Multiple chosen", text: $config.ftpoChosenFeature)
+                }
+            }
             HStack {
                 TextField("Prompt", text: $config.promptFeature)
                 TextField("Completion", text: $config.completionFeature)
@@ -662,6 +669,12 @@ private struct DatasetMappingSection: View {
                 TextField("Answer", text: $config.answerFeature)
                 TextField("Type", text: $config.typeFeature)
             }
+            TextField(
+                "Fallback system prompt (used when the system field is missing or empty)",
+                text: $config.datasetSystemPrompt,
+                axis: .vertical
+            )
+            .lineLimit(2...6)
             TextField("Preference score", text: $config.preferenceScoreFeature)
         }
         .formBlock()

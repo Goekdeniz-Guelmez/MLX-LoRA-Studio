@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import contextlib
+import importlib
 import io
 import json
 import math
@@ -57,6 +58,8 @@ from mlx_lm_lora.utils import (
     save_pretrained_merged_vision,
     save_to_lmstudio_merged,
 )
+
+datasets_module = importlib.import_module("mlx_lm_lora.trainer.datasets")
 
 REFERENCE_MODES = {"dpo", "ftpo", "grpo", "online_dpo", "ppo", "rlhf_reinforce", "xpo"}
 JUDGE_MODES = {"online_dpo", "ppo", "rlhf_reinforce", "xpo"}
@@ -413,6 +416,52 @@ def _normalize_spec(spec: dict[str, Any]) -> SimpleNamespace:
     )
 
     return SimpleNamespace(**args)
+
+
+class _SystemPromptFallbackDataset:
+    """Present a non-empty system field without mutating source rows."""
+
+    def __init__(self, data: Any, system_key: str, fallback: str) -> None:
+        self._data = data
+        self._system_key = system_key
+        self._fallback = fallback
+
+    def __len__(self) -> int:
+        return len(self._data)
+
+    def __getitem__(self, index: int) -> Any:
+        row = self._data[index]
+        if not isinstance(row, dict):
+            return row
+        value = row.get(self._system_key)
+        if value is not None and str(value).strip():
+            return row
+        updated = dict(row)
+        updated[self._system_key] = self._fallback
+        return updated
+
+    def __iter__(self):
+        for index in range(len(self)):
+            yield self[index]
+
+
+def _load_dataset_with_system_fallback(args, tokenizer):
+    fallback = str(getattr(args, "dataset_system_prompt", "") or "").strip()
+    if not fallback or not hasattr(datasets_module, "create_dataset"):
+        return load_dataset(args, tokenizer)
+
+    original_create_dataset = datasets_module.create_dataset
+
+    def create_dataset_with_fallback(data, active_tokenizer, config):
+        system_key = getattr(config, "system_feature", None) or "system"
+        wrapped = _SystemPromptFallbackDataset(data, system_key, fallback)
+        return original_create_dataset(wrapped, active_tokenizer, config)
+
+    datasets_module.create_dataset = create_dataset_with_fallback
+    try:
+        return load_dataset(args, tokenizer)
+    finally:
+        datasets_module.create_dataset = original_create_dataset
 
 
 def _prepare_local_dataset_for_trainer(data: str) -> str:
@@ -917,7 +966,9 @@ def run(args: SimpleNamespace) -> None:
         guard.check("loading the judge model")
 
         studio_log("Loading datasets")
-        train_raw, valid_raw, test_raw = load_dataset(args, tokenizer)
+        train_raw, valid_raw, test_raw = _load_dataset_with_system_fallback(
+            args, tokenizer
+        )
         train_set = CacheDataset(train_raw)
         valid_set = CacheDataset(valid_raw)
         test_set = CacheDataset(test_raw)
