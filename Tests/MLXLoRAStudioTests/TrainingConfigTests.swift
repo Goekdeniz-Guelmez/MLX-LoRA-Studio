@@ -4,7 +4,7 @@ import Testing
 
 @Suite("Training Config")
 struct TrainingConfigTests {
-    @Test("mlx-lm-lora 3.0 settings round trip through run specs")
+    @Test("mlx-lm-lora 3.1 settings round trip through run specs")
     func versionThreeSettingsRoundTrip() throws {
         var config = TrainingConfig()
         config.trainMode = .ftpo

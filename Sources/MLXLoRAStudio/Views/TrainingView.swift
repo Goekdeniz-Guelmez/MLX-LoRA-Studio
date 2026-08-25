@@ -103,6 +103,15 @@ private struct ModeStrip: View {
                     .foregroundStyle(.secondary)
                     .font(.callout)
                     .fixedSize(horizontal: false, vertical: true)
+            } else {
+                Label {
+                    Text("Transformer, linear, and hybrid recurrent models are supported. Qwen3.5/Next, Kimi Linear, Mamba, Jamba, Falcon H1, and similar SSM architectures are detected automatically and train with memory-safe checkpointed blocks.")
+                        .fixedSize(horizontal: false, vertical: true)
+                } icon: {
+                    Image(systemName: "memorychip")
+                }
+                .font(.callout)
+                .foregroundStyle(.secondary)
             }
 
             // The 8-mode segmented picker (SFT/DPO/CPO/ORPO/GRPO/Online

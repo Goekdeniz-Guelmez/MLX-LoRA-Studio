@@ -60,10 +60,10 @@
 
 ## Release v2.0.0
 
-**MLX LoRA Studio v2.0.0 updates the app for `mlx-lm-lora` 3.0.0.**
+**MLX LoRA Studio v2.0.0 updates the app for `mlx-lm-lora` 3.1.2.**
 
 This release adds FTPO, Dynamic Fine-Tuning, and memory-bounded Chunked NLL while aligning
-the native training runner and documentation with the `mlx-lm-lora` 3.0.0 API. Synthetic
+the native training runner and documentation with the `mlx-lm-lora` 3.1.2 API. Synthetic
 dataset creation has been removed from the active app workflow, while historical synthetic
 run folders remain readable in the Runs archive.
 
@@ -488,8 +488,10 @@ The build script:
 
 1. Compiles all Swift files in `Sources/MLXLoRAStudio/` with `swiftc` against
    `SwiftUI` and `AppKit`.
-2. Bundles the app icon, the Python helper (`Backend/`), and the vendored
-   `mlx-lm-lora` checkout (`vendor/`) into `Contents/Resources/`.
+2. Fetches the pinned `mlx-lm-lora` 3.1.2 checkout when it is absent, then
+   bundles it with the app icon and Python helper (`Backend/`) into
+   `Contents/Resources/`. The checkout and Python environment remain local and
+   are not committed to source control.
 3. Stamps the version from the `version` file at the repo root into
    `Info.plist`.
 

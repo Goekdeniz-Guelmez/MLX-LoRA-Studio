@@ -6,9 +6,13 @@ VERSION_ARG="${2:-}"
 APP_NAME="MLXLoRAStudio"
 BUNDLE_ID="io.github.goekdeniz-guelmez.mlx-lora-studio"
 MIN_SYSTEM_VERSION="14.0"
+MLX_LM_LORA_VERSION="3.1.2"
+MLX_LM_LORA_REPOSITORY="https://github.com/Goekdeniz-Guelmez/mlx-lm-lora.git"
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 DIST_DIR="$ROOT_DIR/dist"
+VENDOR_DIR="$ROOT_DIR/vendor"
+MLX_LM_LORA_DIR="$VENDOR_DIR/mlx-lm-lora"
 APP_BUNDLE="$DIST_DIR/MLX LoRA Studio.app"
 APP_CONTENTS="$APP_BUNDLE/Contents"
 APP_MACOS="$APP_CONTENTS/MacOS"
@@ -20,9 +24,28 @@ DMG_BACKGROUND_NAME="logo_ultra-wide.png"
 DMG_ICON_SOURCE="$ROOT_DIR/Sources/Media/logo.png"
 CODE_SIGN_IDENTITY="${CODE_SIGN_IDENTITY:--}"
 
+ensure_vendored_backend() {
+  local version_file="$MLX_LM_LORA_DIR/mlx_lm_lora/_version.py"
+
+  if [[ ! -d "$MLX_LM_LORA_DIR" ]]; then
+    echo "Fetching mlx-lm-lora v$MLX_LM_LORA_VERSION for this build..."
+    mkdir -p "$VENDOR_DIR"
+    git clone --depth 1 --branch "v$MLX_LM_LORA_VERSION" \
+      "$MLX_LM_LORA_REPOSITORY" "$MLX_LM_LORA_DIR"
+  fi
+
+  if [[ ! -f "$version_file" ]] \
+    || ! grep -Fq "__version__ = \"$MLX_LM_LORA_VERSION\"" "$version_file"; then
+    echo "Expected bundled mlx-lm-lora v$MLX_LM_LORA_VERSION at $MLX_LM_LORA_DIR." >&2
+    echo "Remove that directory and rerun the build so Studio can fetch the pinned backend." >&2
+    return 1
+  fi
+}
+
 pkill -x "$APP_NAME" >/dev/null 2>&1 || true
 
 mkdir -p "$DIST_DIR"
+ensure_vendored_backend
 BUILD_BINARY="$DIST_DIR/$APP_NAME"
 swiftc \
   -default-isolation MainActor \
@@ -79,7 +102,7 @@ cp "$ROOT_DIR/Sources/Media/logo.png" "$APP_CONTENTS/Resources/AppIcon.png"
 SUPPORT_DIR="$APP_CONTENTS/Resources/StudioSupport"
 mkdir -p "$SUPPORT_DIR"
 cp -R "$ROOT_DIR/Backend" "$SUPPORT_DIR/Backend"
-cp -R "$ROOT_DIR/vendor" "$SUPPORT_DIR/vendor"
+cp -R "$VENDOR_DIR" "$SUPPORT_DIR/vendor"
 
 # Single source of truth for the bundle version. Falls back to
 # "0.0.0" if the file is missing so the plist still writes cleanly
@@ -339,6 +362,11 @@ case "$MODE" in
     codesign_app
     build_dmg
     ;;
+  --release-assets|release-assets)
+    codesign_app
+    build_dmg
+    build_release_assets
+    ;;
   --release-package|release-package)
     codesign_app
     build_dmg
@@ -346,7 +374,7 @@ case "$MODE" in
     publish_github_release
     ;;
   *)
-    echo "usage: $0 [run|--debug|--logs|--telemetry|--verify|--package|--release-package [version]]" >&2
+    echo "usage: $0 [run|--debug|--logs|--telemetry|--verify|--package|--release-assets|--release-package [version]]" >&2
     exit 2
     ;;
 esac

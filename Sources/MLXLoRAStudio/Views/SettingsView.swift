@@ -119,11 +119,20 @@ struct SettingsView: View {
                 }
 
                 Section("Package Updates") {
+                    LabeledContent("Bundled backend") {
+                        Text("mlx-lm-lora 3.1.2")
+                            .foregroundStyle(.secondary)
+                    }
+                    Text("This is the backend copied into every app build. Version 3.1.2 adds automatic memory-safe training support for recurrent and hybrid SSM models; no extra configuration is needed.")
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+
                     HStack {
                         VStack(alignment: .leading, spacing: 4) {
                             Text("Python backends")
                                 .font(.headline)
-                            Text("Updates or reinstalls MLX runtime packages, then pulls and installs the local mlx-lm-lora checkout with its requirements, including OpenAI-compatible API support.")
+                            Text("Updates or reinstalls MLX runtime packages, then installs this release's pinned local mlx-lm-lora checkout with its requirements, including OpenAI-compatible API support.")
                                 .font(.callout)
                                 .foregroundStyle(.secondary)
                         }

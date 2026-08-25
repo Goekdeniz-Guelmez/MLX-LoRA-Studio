@@ -340,12 +340,7 @@ final class PythonJobRunner {
           fi
         }
 
-        echo "Updating mlx-lm-lora checkout..."
-        if [ -d "\(ShellQuote.escape(packageURL.appending(path: ".git").path))" ]; then
-          git -C "$PACKAGE_DIR" pull --ff-only
-        else
-          echo "No git checkout found at $PACKAGE_DIR; skipping git pull."
-        fi
+        echo "Using the bundled mlx-lm-lora checkout (pinned by this Studio release)."
         if [ -n "$UV_BIN" ]; then
           echo "Using uv at $UV_BIN with interpreter $PYTHON_BIN."
         else
