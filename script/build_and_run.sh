@@ -6,12 +6,13 @@ VERSION_ARG="${2:-}"
 APP_NAME="MLXLoRAStudio"
 BUNDLE_ID="io.github.goekdeniz-guelmez.mlx-lora-studio"
 MIN_SYSTEM_VERSION="14.0"
+APP_ARCHITECTURE="${APP_ARCHITECTURE:-arm64}"
 MLX_LM_LORA_VERSION="3.1.2"
 MLX_LM_LORA_REPOSITORY="https://github.com/Goekdeniz-Guelmez/mlx-lm-lora.git"
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 DIST_DIR="$ROOT_DIR/dist"
-VENDOR_DIR="$ROOT_DIR/vendor"
+VENDOR_DIR="${VENDOR_DIR:-$ROOT_DIR/vendor}"
 MLX_LM_LORA_DIR="$VENDOR_DIR/mlx-lm-lora"
 APP_BUNDLE="$DIST_DIR/MLX LoRA Studio.app"
 APP_CONTENTS="$APP_BUNDLE/Contents"
@@ -48,7 +49,7 @@ mkdir -p "$DIST_DIR"
 ensure_vendored_backend
 BUILD_BINARY="$DIST_DIR/$APP_NAME"
 swiftc \
-  -default-isolation MainActor \
+  -target "${APP_ARCHITECTURE}-apple-macosx${MIN_SYSTEM_VERSION}" \
   "$ROOT_DIR/Sources/MLXLoRAStudio/App/MLXLoRAStudioApp.swift" \
   "$ROOT_DIR/Sources/MLXLoRAStudio/Models/TrainingModels.swift" \
   "$ROOT_DIR/Sources/MLXLoRAStudio/Models/PythonEnvironment.swift" \
@@ -266,7 +267,14 @@ build_dmg() {
   # supports (macOS 14+); APFS read-only images are slightly
   # smaller but can't be opened on older releases.
   /usr/bin/hdiutil create -srcfolder "$stage" -volname "$DMG_VOLUME_NAME" -ov -fs HFS+ -format UDIF "$rw_image" >/dev/null
-  configure_dmg_finder_view "$rw_image"
+  if [[ "${CI:-}" == "true" ]]; then
+    # GitHub-hosted runners have no interactive Finder session. The staged
+    # background and Applications link are still included; only Finder window
+    # positioning is skipped so headless packaging remains deterministic.
+    echo "CI detected; skipping interactive Finder DMG styling."
+  else
+    configure_dmg_finder_view "$rw_image"
+  fi
   /usr/bin/hdiutil convert "$rw_image" -format UDZO -imagekey zlib-level=9 -o "$dmg_path" >/dev/null
 
   rm -rf "$stage" "$rw_image"

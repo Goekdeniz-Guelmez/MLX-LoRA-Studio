@@ -11,6 +11,11 @@ on:
         required: false
         type: string
         default: ""
+      publish:
+        description: "Publish/update the GitHub release after a successful build"
+        required: false
+        type: boolean
+        default: false
 
 permissions:
   contents: write
@@ -22,7 +27,7 @@ concurrency:
 jobs:
   build:
     name: Build .app and .dmg
-    runs-on: macos-14
+    runs-on: macos-15
     timeout-minutes: 60
     outputs:
       version: ${{ steps.version.outputs.VERSION }}
@@ -158,13 +163,36 @@ jobs:
 
       - name: Verify .app exists
         run: |
+          set -euo pipefail
           APP="dist/MLX LoRA Studio.app"
           if [[ ! -d "$APP" ]]; then
             echo "::error::Expected .app not found: $APP"
             exit 1
           fi
-          /usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" \
-            "$APP/Contents/Info.plist" || true
+          EXPECTED_VERSION="${{ steps.version.outputs.VERSION }}"
+          ACTUAL_VERSION="$(/usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" "$APP/Contents/Info.plist")"
+          if [[ "$ACTUAL_VERSION" != "$EXPECTED_VERSION" ]]; then
+            echo "::error::App version $ACTUAL_VERSION does not match $EXPECTED_VERSION."
+            exit 1
+          fi
+
+          BACKEND_VERSION_FILE="$APP/Contents/Resources/StudioSupport/vendor/mlx-lm-lora/mlx_lm_lora/_version.py"
+          grep -Fq '__version__ = "3.1.2"' "$BACKEND_VERSION_FILE"
+
+          /usr/bin/codesign --verify --deep --strict --verbose=2 "$APP"
+          /usr/bin/codesign -dv --verbose=4 "$APP" 2>&1 | tee "$RUNNER_TEMP/codesign.txt"
+          if [[ "${{ steps.signing.outputs.enabled }}" != "true" ]]; then
+            grep -Fq "Signature=adhoc" "$RUNNER_TEMP/codesign.txt"
+          fi
+
+          file "$APP/Contents/MacOS/MLXLoRAStudio"
+          /usr/bin/lipo "$APP/Contents/MacOS/MLXLoRAStudio" -verify_arch arm64
+
+      - name: Verify DMG integrity
+        run: |
+          set -euo pipefail
+          DMG="dist/MLX-LoRA-Studio-${{ steps.version.outputs.VERSION }}.dmg"
+          /usr/bin/hdiutil verify "$DMG"
 
       - name: Zip the .app bundle
         # The .app is a directory, so we wrap it in a .zip so the
@@ -199,8 +227,9 @@ jobs:
           retention-days: 14
 
   release:
-    name: Draft GitHub Release
+    name: Publish GitHub Release
     needs: build
+    if: github.event_name == 'push' || inputs.publish == true
     runs-on: ubuntu-latest
     timeout-minutes: 15
 
@@ -244,4 +273,5 @@ jobs:
           generate_release_notes: false
           files: |
             dist/MLX-LoRA-Studio-${{ needs.build.outputs.version }}.dmg
+            dist/MLX-LoRA-Studio-${{ needs.build.outputs.version }}.dmg.sha256
             dist/MLX-LoRA-Studio-${{ needs.build.outputs.version }}.app.zip
