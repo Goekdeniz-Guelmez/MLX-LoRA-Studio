@@ -38,6 +38,16 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Select Xcode 26
+        run: |
+          set -euo pipefail
+          XCODE_APP="$(find /Applications -maxdepth 1 -type d -name 'Xcode_26*.app' -print | sort | tail -n 1)"
+          if [[ -z "$XCODE_APP" ]]; then
+            echo "::error::Xcode 26 is required to compile the guarded Liquid Glass UI."
+            exit 1
+          fi
+          sudo xcode-select --switch "$XCODE_APP/Contents/Developer"
+
       - name: Show toolchain
         run: |
           sw_vers
