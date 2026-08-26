@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: "Release version (overrides the version file when set)"
+        description: "Release version for a manual build (overrides the version file when set)"
         required: false
         type: string
         default: ""
@@ -58,12 +58,17 @@ jobs:
       - name: Show effective version
         id: version
         run: |
-          if [[ -n "${{ inputs.version }}" ]]; then
+          # A tag is the source of truth for a published release. This avoids
+          # publishing, for example, tag v2.0.3 with a 2.0.2 app bundle when
+          # the committed version file was not updated first.
+          if [[ "${GITHUB_REF_TYPE}" == "tag" ]]; then
+            VERSION="${GITHUB_REF_NAME#v}"
+          elif [[ -n "${{ inputs.version }}" ]]; then
             VERSION="${{ inputs.version }}"
           else
             VERSION="$(tr -d '[:space:]' < version)"
           fi
-          VERSION="${VERSION#v}"   # strip a leading v if the tag had one
+          VERSION="${VERSION#v}"
           echo "VERSION=$VERSION"  >> "$GITHUB_OUTPUT"
           echo "Resolved version: $VERSION"
 
@@ -274,7 +279,7 @@ jobs:
           echo "Using tag: $TAG"
 
       - name: Create official release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           tag_name: ${{ steps.tag.outputs.TAG }}
           name: "MLX LoRA Studio ${{ needs.build.outputs.version }}"
