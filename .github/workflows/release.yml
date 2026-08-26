@@ -7,10 +7,15 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: "Release version (overrides the version file when set)"
+        description: "Release version for a manual build (overrides the version file when set)"
         required: false
         type: string
         default: ""
+      publish:
+        description: "Publish/update the GitHub release after a successful build"
+        required: false
+        type: boolean
+        default: false
 
 permissions:
   contents: write
@@ -22,16 +27,26 @@ concurrency:
 jobs:
   build:
     name: Build .app and .dmg
-    runs-on: macos-14
+    runs-on: macos-15
     timeout-minutes: 60
     outputs:
       version: ${{ steps.version.outputs.VERSION }}
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           fetch-depth: 0
+
+      - name: Select Xcode 26
+        run: |
+          set -euo pipefail
+          XCODE_APP="$(find /Applications -maxdepth 1 -type d -name 'Xcode_26*.app' -print | sort | tail -n 1)"
+          if [[ -z "$XCODE_APP" ]]; then
+            echo "::error::Xcode 26 is required to compile the guarded Liquid Glass UI."
+            exit 1
+          fi
+          sudo xcode-select --switch "$XCODE_APP/Contents/Developer"
 
       - name: Show toolchain
         run: |
@@ -43,12 +58,17 @@ jobs:
       - name: Show effective version
         id: version
         run: |
-          if [[ -n "${{ inputs.version }}" ]]; then
+          # A tag is the source of truth for a published release. This avoids
+          # publishing, for example, tag v2.0.3 with a 2.0.2 app bundle when
+          # the committed version file was not updated first.
+          if [[ "${GITHUB_REF_TYPE}" == "tag" ]]; then
+            VERSION="${GITHUB_REF_NAME#v}"
+          elif [[ -n "${{ inputs.version }}" ]]; then
             VERSION="${{ inputs.version }}"
           else
             VERSION="$(tr -d '[:space:]' < version)"
           fi
-          VERSION="${VERSION#v}"   # strip a leading v if the tag had one
+          VERSION="${VERSION#v}"
           echo "VERSION=$VERSION"  >> "$GITHUB_OUTPUT"
           echo "Resolved version: $VERSION"
 
@@ -158,13 +178,36 @@ jobs:
 
       - name: Verify .app exists
         run: |
+          set -euo pipefail
           APP="dist/MLX LoRA Studio.app"
           if [[ ! -d "$APP" ]]; then
             echo "::error::Expected .app not found: $APP"
             exit 1
           fi
-          /usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" \
-            "$APP/Contents/Info.plist" || true
+          EXPECTED_VERSION="${{ steps.version.outputs.VERSION }}"
+          ACTUAL_VERSION="$(/usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" "$APP/Contents/Info.plist")"
+          if [[ "$ACTUAL_VERSION" != "$EXPECTED_VERSION" ]]; then
+            echo "::error::App version $ACTUAL_VERSION does not match $EXPECTED_VERSION."
+            exit 1
+          fi
+
+          BACKEND_VERSION_FILE="$APP/Contents/Resources/StudioSupport/vendor/mlx-lm-lora/mlx_lm_lora/_version.py"
+          grep -Fq '__version__ = "3.1.2"' "$BACKEND_VERSION_FILE"
+
+          /usr/bin/codesign --verify --deep --strict --verbose=2 "$APP"
+          /usr/bin/codesign -dv --verbose=4 "$APP" 2>&1 | tee "$RUNNER_TEMP/codesign.txt"
+          if [[ "${{ steps.signing.outputs.enabled }}" != "true" ]]; then
+            grep -Fq "Signature=adhoc" "$RUNNER_TEMP/codesign.txt"
+          fi
+
+          file "$APP/Contents/MacOS/MLXLoRAStudio"
+          /usr/bin/lipo "$APP/Contents/MacOS/MLXLoRAStudio" -verify_arch arm64
+
+      - name: Verify DMG integrity
+        run: |
+          set -euo pipefail
+          DMG="dist/MLX-LoRA-Studio-${{ steps.version.outputs.VERSION }}.dmg"
+          /usr/bin/hdiutil verify "$DMG"
 
       - name: Zip the .app bundle
         # The .app is a directory, so we wrap it in a .zip so the
@@ -188,7 +231,7 @@ jobs:
           du -h "MLX-LoRA-Studio-${{ steps.version.outputs.VERSION }}.app.zip"
 
       - name: Upload build artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: MLX-LoRA-Studio-${{ steps.version.outputs.VERSION }}
           path: |
@@ -199,19 +242,20 @@ jobs:
           retention-days: 14
 
   release:
-    name: Draft GitHub Release
+    name: Publish GitHub Release
     needs: build
+    if: github.event_name == 'push' || inputs.publish == true
     runs-on: ubuntu-latest
     timeout-minutes: 15
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
       - name: Download build artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: MLX-LoRA-Studio-${{ needs.build.outputs.version }}
           path: dist
@@ -235,7 +279,7 @@ jobs:
           echo "Using tag: $TAG"
 
       - name: Create official release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           tag_name: ${{ steps.tag.outputs.TAG }}
           name: "MLX LoRA Studio ${{ needs.build.outputs.version }}"
@@ -244,4 +288,5 @@ jobs:
           generate_release_notes: false
           files: |
             dist/MLX-LoRA-Studio-${{ needs.build.outputs.version }}.dmg
+            dist/MLX-LoRA-Studio-${{ needs.build.outputs.version }}.dmg.sha256
             dist/MLX-LoRA-Studio-${{ needs.build.outputs.version }}.app.zip
