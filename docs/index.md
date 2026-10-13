@@ -16,8 +16,8 @@ It is a graphical front-end to the [`mlx-lm-lora`](https://github.com/Goekdeniz-
 ## Features at a glance
 
 ### 🧠 Training
-- **10 training algorithms:** SFT, DPO, FTPO, CPO, ORPO, GRPO, Online DPO, XPO, RLHF Reinforce, and PPO.
-- **mlx-lm-lora 3.0.0 SFT losses:** NLL, memory-bounded Chunked NLL, and Dynamic Fine-Tuning.
+- **12 training algorithms:** SFT, DPO, DSLA, FTPO, CPO, ORPO, GRPO, KLPO, Online DPO, XPO, RLHF Reinforce, and PPO.
+- **mlx-lm-lora 5.8.6 backend** with SFT losses: NLL, memory-bounded Chunked NLL, and Dynamic Fine-Tuning.
 - **5 adapter / training modes:** LoRA, DoRA, QLoRA (4/6/8-bit), full fine-tuning, and **Quantization-Aware Training (QAT)**.
 - **10 optimizers selectable** (Adam, AdamW, Muon documented; plus SGD, RMSprop, Adagrad, AdaDelta, Adamax, Lion, Adafactor).
 - **Adapter resume** — continue from an existing checkpoint.
