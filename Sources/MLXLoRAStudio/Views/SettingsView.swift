@@ -120,10 +120,10 @@ struct SettingsView: View {
 
                 Section("Package Updates") {
                     LabeledContent("Bundled backend") {
-                        Text("mlx-lm-lora 3.1.2")
+                        Text("mlx-lm-lora 5.8.6")
                             .foregroundStyle(.secondary)
                     }
-                    Text("This is the backend copied into every app build. Version 3.1.2 adds automatic memory-safe training support for recurrent and hybrid SSM models; no extra configuration is needed.")
+                    Text("This is the backend copied into every app build. Version 5.8.6 adds the DSLA and KLPO trainers, fast VJPs and a tunable recurrence chunk size for hybrid SSM models, and micro-batched judge scoring for online RL. It needs Python 3.11 or newer.")
                         .font(.callout)
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
