@@ -33,6 +33,7 @@ from mlx_lm_lora.train import (
 from mlx_lm_lora.trainer.cpo_trainer import CPOTrainingArgs, train_cpo
 from mlx_lm_lora.trainer.datasets import CacheDataset, load_dataset
 from mlx_lm_lora.trainer.dpo_trainer import DPOTrainingArgs, train_dpo
+from mlx_lm_lora.trainer.dsla_trainer import DSLATrainingArgs, train_dsla
 from mlx_lm_lora.trainer.ftpo_trainer import FTPOTrainingArgs, train_ftpo
 from mlx_lm_lora.trainer.grpo_reward_functions import (
     get_default_reward_functions,
@@ -40,6 +41,7 @@ from mlx_lm_lora.trainer.grpo_reward_functions import (
     list_available_reward_functions,
 )
 from mlx_lm_lora.trainer.grpo_trainer import GRPOTrainingArgs, train_grpo
+from mlx_lm_lora.trainer.klpo_trainer import KLPOTrainingArgs, train_klpo
 from mlx_lm_lora.trainer.online_dpo_trainer import (
     OnlineDPOTrainingArgs,
     train_online_dpo,
@@ -63,6 +65,24 @@ datasets_module = importlib.import_module("mlx_lm_lora.trainer.datasets")
 
 REFERENCE_MODES = {"dpo", "ftpo", "grpo", "online_dpo", "ppo", "rlhf_reinforce", "xpo"}
 JUDGE_MODES = {"online_dpo", "ppo", "rlhf_reinforce", "xpo"}
+REWARD_FUNCTION_MODES = {"grpo", "klpo"}
+MICRO_BATCH_MODES = {"online_dpo", "ppo", "rlhf_reinforce", "xpo"}
+DSLA_LOSSES = {"dpo", "orpo", "cpo"}
+DSLA_VARIANTS = {"similarity", "direction", "both"}
+DSLA_POOLINGS = {"answer_mean", "last_token", "last_k_mean", "prompt_answer_mean"}
+KLPO_ROUTES = {"token", "sequence"}
+KLPO_KL_ESTIMATORS = {"mc", "topk", "binary", "full"}
+
+
+def needs_reference_model(args) -> bool:
+    """Whether this run loads a frozen reference model.
+
+    DSLA only needs one when its underlying preference objective is DPO;
+    the ORPO and CPO variants are reference-free.
+    """
+    if args.train_mode in REFERENCE_MODES:
+        return True
+    return args.train_mode == "dsla" and getattr(args, "dsla_loss", "dpo") == "dpo"
 STUDIO_OUT = sys.stdout
 OPTIMIZER_CLASSES = {
     "sgd": optim.SGD,
@@ -337,6 +357,21 @@ def _test_metrics_from_output(output: str, iteration: int) -> dict[str, Any]:
     if rewards:
         metrics["test_chosen_reward"] = float(rewards.group(1))
         metrics["test_rejected_reward"] = float(rewards.group(2))
+    else:
+        dsla_rewards = re.search(
+            r"Chosen reward:\s*([-+]?\d+(?:\.\d+)?(?:e[-+]?\d+)?),\s*rejected reward:\s*([-+]?\d+(?:\.\d+)?(?:e[-+]?\d+)?)",
+            plain,
+            flags=re.IGNORECASE,
+        )
+        if dsla_rewards:
+            metrics["test_chosen_reward"] = float(dsla_rewards.group(1))
+            metrics["test_rejected_reward"] = float(dsla_rewards.group(2))
+    if "test_loss" not in metrics:
+        dsla_loss = _first_float(
+            r"\bTest loss:\s*([-+]?\d+(?:\.\d+)?(?:e[-+]?\d+)?)", plain
+        )
+        if dsla_loss is not None:
+            metrics["test_loss"] = dsla_loss
     return metrics
 
 
@@ -363,7 +398,15 @@ def _normalize_spec(spec: dict[str, Any]) -> SimpleNamespace:
     args["hf_dataset"] = args.get("hf_dataset") or None
     args["lr_schedule"] = args.get("lr_schedule") or None
 
+    # Sampling knobs and the judge system prompt are not in every
+    # mlx-lm-lora CONFIG_DEFAULTS release, and Studio omits empty strings
+    # from the spec, so give them stable defaults here.
+    args.setdefault("top_p", 0.95)
+    args.setdefault("top_k", 20)
+    args.setdefault("min_p", 0.0)
+
     for key in (
+        "judge_system",
         "reference_model_path",
         "resume_adapter_file",
         "reward_weights",
@@ -409,6 +452,54 @@ def _normalize_spec(spec: dict[str, Any]) -> SimpleNamespace:
         ]
     elif isinstance(args.get("alpha"), (int, float)):
         args["alpha"] = [float(args["alpha"])]
+    args["recurrence_chunk_size"] = _positive_int(
+        args.get("recurrence_chunk_size") or 64, "recurrence_chunk_size"
+    )
+    if args.get("micro_batch_size") in (None, "", 0):
+        args["micro_batch_size"] = None
+    else:
+        args["micro_batch_size"] = _positive_int(
+            args.get("micro_batch_size"), "micro_batch_size"
+        )
+
+    mode = args.get("train_mode")
+    if mode == "dsla":
+        args["dsla_loss"] = _choice(args.get("dsla_loss"), DSLA_LOSSES, "dsla_loss")
+        args["latent_variant"] = _choice(
+            args.get("latent_variant"), DSLA_VARIANTS, "latent_variant"
+        )
+        args["latent_pooling"] = _choice(
+            args.get("latent_pooling"), DSLA_POOLINGS, "latent_pooling"
+        )
+        args["latent_weight"] = float(args.get("latent_weight"))
+        args["latent_margin"] = float(args.get("latent_margin"))
+        args["latent_gamma"] = _positive_float(args.get("latent_gamma"), "latent_gamma")
+        args["latent_layer"] = str(args.get("latent_layer") or "final").strip()
+        if args.get("efficient_long_context"):
+            # DSLA pools hidden states over whole responses, so the
+            # sequence-chunked forward pass cannot be used.
+            studio_log(
+                "DSLA does not support efficient long context; running with full sequences."
+            )
+            args["efficient_long_context"] = False
+    if mode == "klpo":
+        args["klpo_route"] = _choice(args.get("klpo_route"), KLPO_ROUTES, "klpo_route")
+        args["klpo_kl_estimator"] = _choice(
+            args.get("klpo_kl_estimator"), KLPO_KL_ESTIMATORS, "klpo_kl_estimator"
+        )
+        args["klpo_mc_samples"] = _positive_int(
+            args.get("klpo_mc_samples"), "klpo_mc_samples"
+        )
+        args["klpo_top_k"] = _positive_int(args.get("klpo_top_k"), "klpo_top_k")
+        args["klpo_tail_floor"] = _positive_float(
+            args.get("klpo_tail_floor"), "klpo_tail_floor"
+        )
+    if mode in JUDGE_MODES and not str(args.get("judge") or "").strip():
+        raise ValueError(
+            f"Training mode '{mode}' requires a judge model. "
+            "Enter a judge model id, or choose the User judge for human feedback."
+        )
+
     args["seq_step_size"] = (
         int(args.get("seq_step_size") or 512)
         if args.get("efficient_long_context")
@@ -416,6 +507,13 @@ def _normalize_spec(spec: dict[str, Any]) -> SimpleNamespace:
     )
 
     return SimpleNamespace(**args)
+
+
+def _choice(value: Any, allowed: set[str], name: str) -> str:
+    text = str(value or "").strip()
+    if text not in allowed:
+        raise ValueError(f"{name} must be one of: {', '.join(sorted(allowed))}.")
+    return text
 
 
 class _SystemPromptFallbackDataset:
@@ -606,6 +704,7 @@ def _base_training_kwargs(args: SimpleNamespace, adapter_file: Path) -> dict[str
         "max_seq_length": args.max_seq_length,
         "grad_checkpoint": args.grad_checkpoint,
         "gradient_accumulation_steps": args.gradient_accumulation_steps,
+        "recurrence_chunk_size": args.recurrence_chunk_size,
     }
 
 
@@ -774,19 +873,7 @@ def run_orpo(
     )
 
 
-def run_grpo(
-    args,
-    model,
-    tokenizer,
-    ref_model,
-    _judge_model,
-    _judge_tokenizer,
-    opt,
-    train_set,
-    valid_set,
-    adapter_file,
-    callback,
-):
+def _reward_functions(args: SimpleNamespace):
     if args.reward_functions_file:
         load_reward_functions_from_file(args.reward_functions_file)
 
@@ -804,6 +891,104 @@ def run_grpo(
                 f"Available reward functions: {list_available_reward_functions()}"
             )
             raise
+    return reward_funcs
+
+
+def _reward_weights(args: SimpleNamespace) -> list[float] | None:
+    if not args.reward_weights:
+        return None
+    return [
+        float(x) for x in str(args.reward_weights).strip("[]").split(",") if x.strip()
+    ]
+
+
+def run_dsla(
+    args,
+    model,
+    _tokenizer,
+    ref_model,
+    _judge_model,
+    _judge_tokenizer,
+    opt,
+    train_set,
+    valid_set,
+    adapter_file,
+    callback,
+):
+    train_dsla(
+        model=model,
+        optimizer=opt,
+        train_dataset=train_set,
+        val_dataset=valid_set,
+        args=DSLATrainingArgs(
+            **_base_training_kwargs(args, adapter_file),
+            loss_type=args.dsla_loss,
+            dpo_cpo_loss_type=args.dpo_cpo_loss_type,
+            beta=args.beta,
+            delta=args.delta,
+            latent_weight=args.latent_weight,
+            latent_margin=args.latent_margin,
+            latent_gamma=args.latent_gamma,
+            latent_variant=args.latent_variant,
+            latent_pooling=args.latent_pooling,
+            latent_layer=args.latent_layer,
+            **_qat_kwargs(args),
+        ),
+        ref_model=ref_model,
+        training_callback=callback,
+    )
+
+
+def run_klpo(
+    args,
+    model,
+    tokenizer,
+    _ref_model,
+    _judge_model,
+    _judge_tokenizer,
+    opt,
+    train_set,
+    valid_set,
+    adapter_file,
+    callback,
+):
+    train_klpo(
+        model=model,
+        tokenizer=tokenizer,
+        optimizer=opt,
+        train_dataset=train_set,
+        val_dataset=valid_set,
+        reward_funcs=_reward_functions(args),
+        args=KLPOTrainingArgs(
+            **_base_training_kwargs(args, adapter_file),
+            beta=args.beta,
+            route=args.klpo_route,
+            kl_estimator=args.klpo_kl_estimator,
+            mc_samples=args.klpo_mc_samples,
+            top_k=args.klpo_top_k,
+            tail_floor=args.klpo_tail_floor,
+            max_completion_length=args.max_completion_length,
+            temperature=args.temperature,
+            reward_weights=_reward_weights(args),
+        ),
+        training_callback=callback,
+    )
+
+
+def run_grpo(
+    args,
+    model,
+    tokenizer,
+    ref_model,
+    _judge_model,
+    _judge_tokenizer,
+    opt,
+    train_set,
+    valid_set,
+    adapter_file,
+    callback,
+):
+    reward_funcs = _reward_functions(args)
 
     train_grpo(
         model=model,
@@ -825,11 +1010,7 @@ def run_grpo(
             top_p=args.top_p,
             top_k=args.top_k,
             min_p=args.min_p,
-            reward_weights=(
-                [float(x) for x in args.reward_weights.strip("[]").split(",")]
-                if args.reward_weights
-                else None
-            ),
+            reward_weights=_reward_weights(args),
             importance_sampling_level=args.importance_sampling_level,
             grpo_loss_type=args.grpo_loss_type,
             **_qat_kwargs(args),
@@ -864,6 +1045,7 @@ def run_online_family(
         "reference_model_path": args.reference_model_path,
         "judge": args.judge,
         "max_completion_length": args.max_completion_length,
+        "micro_batch_size": args.micro_batch_size,
         **_qat_kwargs(args),
     }
     if args.train_mode in {"online_dpo", "xpo", "ppo"}:
@@ -902,10 +1084,12 @@ def run_online_family(
 PIPELINES = {
     "sft": run_sft,
     "dpo": run_dpo,
+    "dsla": run_dsla,
     "ftpo": run_ftpo,
     "cpo": run_cpo,
     "orpo": run_orpo,
     "grpo": run_grpo,
+    "klpo": run_klpo,
     "online_dpo": run_online_family,
     "ppo": run_online_family,
     "rlhf_reinforce": run_online_family,
@@ -953,7 +1137,7 @@ def run(args: SimpleNamespace) -> None:
         guard.check("loading the trainable model")
 
         reference_model = (
-            load_reference_model(args) if args.train_mode in REFERENCE_MODES else None
+            load_reference_model(args) if needs_reference_model(args) else None
         )
         guard.release_caches()
         guard.check("loading the reference model")
