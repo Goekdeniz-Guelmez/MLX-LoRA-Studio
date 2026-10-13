@@ -117,7 +117,7 @@ enum MemoryEstimator {
         // Reference model (DPO/RL modes need a frozen copy of the base model)
         // and judge model (online DPO/XPO/PPO/RLHF load a second LM for
         // scoring). They sit idle most of the time but do take RAM.
-        let referenceModel: UInt64 = config.trainMode.needsReference ? weights : 0
+        let referenceModel: UInt64 = config.needsReferenceModel ? weights : 0
         let judgeModel: UInt64 = config.trainMode.needsJudge ? UInt64(Double(params ?? 0) * bytesPerParam) : 0
 
         // MLX + Python + tokenizer caches, etc. Empirical floor: 1.5 GB.
@@ -325,7 +325,7 @@ enum MemoryEstimator {
             hints.append("Switch to LoRA")
         }
 
-        if config.trainMode.needsReference {
+        if config.needsReferenceModel {
             hints.append("Use a smaller reference model")
         }
 
