@@ -37,6 +37,100 @@ struct TrainingConfigTests {
         #expect(restored.datasetSystemPrompt == "You are a careful assistant.")
     }
 
+    @Test("mlx-lm-lora 5.8 DSLA settings round trip through run specs")
+    func dslaSettingsRoundTrip() throws {
+        var config = TrainingConfig()
+        config.trainMode = .dsla
+        config.dslaLoss = .orpo
+        config.latentWeight = 0.2
+        config.latentMargin = 0.1
+        config.latentGamma = 5.0
+        config.latentVariant = .direction
+        config.latentPooling = .lastKMean
+        config.latentLayer = "late"
+        config.recurrenceChunkSize = 32
+        config.efficientLongContext = true
+
+        let data = try config.runSpecData()
+        let object = try #require(
+            JSONSerialization.jsonObject(with: data) as? [String: Any]
+        )
+        #expect(object["train_mode"] as? String == "dsla")
+        #expect(object["dsla_loss"] as? String == "orpo")
+        #expect(object["latent_pooling"] as? String == "last_k_mean")
+        #expect(object["recurrence_chunk_size"] as? Int == 32)
+        // DSLA cannot use the sequence-chunked forward pass.
+        #expect(object["efficient_long_context"] as? Bool == false)
+        #expect(object["klpo_route"] == nil)
+        #expect(!config.needsReferenceModel)
+
+        let restored = try TrainingConfig(jsonData: data)
+        #expect(restored.trainMode == .dsla)
+        #expect(restored.dslaLoss == .orpo)
+        #expect(restored.latentWeight == 0.2)
+        #expect(restored.latentMargin == 0.1)
+        #expect(restored.latentGamma == 5.0)
+        #expect(restored.latentVariant == .direction)
+        #expect(restored.latentPooling == .lastKMean)
+        #expect(restored.latentLayer == "late")
+        #expect(restored.recurrenceChunkSize == 32)
+
+        config.dslaLoss = .dpo
+        #expect(config.needsReferenceModel)
+    }
+
+    @Test("mlx-lm-lora 5.8 KLPO settings round trip through run specs")
+    func klpoSettingsRoundTrip() throws {
+        var config = TrainingConfig()
+        config.trainMode = .klpo
+        config.klpoRoute = .sequence
+        config.klpoKLEstimator = .topk
+        config.klpoMCSamples = 32
+        config.klpoTopK = 64
+        config.klpoTailFloor = 0.00001
+        config.qatEnable = true
+
+        let data = try config.runSpecData()
+        let object = try #require(
+            JSONSerialization.jsonObject(with: data) as? [String: Any]
+        )
+        #expect(object["klpo_route"] as? String == "sequence")
+        #expect(object["klpo_kl_estimator"] as? String == "topk")
+        #expect(object["klpo_top_k"] as? Int == 64)
+        #expect(object["qat_enable"] as? Bool == false)
+        #expect(object["judge"] == nil)
+
+        let restored = try TrainingConfig(jsonData: data)
+        #expect(restored.trainMode == .klpo)
+        #expect(restored.klpoRoute == .sequence)
+        #expect(restored.klpoKLEstimator == .topk)
+        #expect(restored.klpoMCSamples == 32)
+        #expect(restored.klpoTopK == 64)
+        #expect(restored.klpoTailFloor == 0.00001)
+    }
+
+    @Test("Online modes write micro batch size only when set")
+    func microBatchSizeIsOptional() throws {
+        var config = TrainingConfig()
+        config.trainMode = .onlineDPO
+        var object = try #require(
+            JSONSerialization.jsonObject(with: config.runSpecData()) as? [String: Any]
+        )
+        #expect(object["micro_batch_size"] == nil)
+
+        config.microBatchSize = 2
+        object = try #require(
+            JSONSerialization.jsonObject(with: config.runSpecData()) as? [String: Any]
+        )
+        #expect(object["micro_batch_size"] as? Int == 2)
+
+        config.trainMode = .sft
+        object = try #require(
+            JSONSerialization.jsonObject(with: config.runSpecData()) as? [String: Any]
+        )
+        #expect(object["micro_batch_size"] == nil)
+    }
+
     @Test("VLM settings are written to the run spec")
     func vlmSettingsAreWrittenToRunSpec() throws {
         var config = TrainingConfig()
