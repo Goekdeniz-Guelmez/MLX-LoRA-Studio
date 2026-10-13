@@ -326,6 +326,11 @@ final class PythonJobRunner {
 
         PY_VERSION="$("$PYTHON_BIN" -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')"
         case "$PY_VERSION" in
+          3.8|3.9|3.10)
+            echo "Error: mlx-lm-lora 5.8.6 requires Python 3.11 or newer, but $PYTHON_BIN is Python $PY_VERSION."
+            echo "Create or select a Python 3.12 or 3.13 environment in Settings and retry."
+            exit 1
+            ;;
           3.14|3.15|3.16|3.17|3.18|3.19)
             echo "Warning: Python $PY_VERSION is very new; mlx/mlx-lm wheels may not be published for it yet."
             echo "If installation fails, create/select a Python 3.12 or 3.13 environment and retry."
