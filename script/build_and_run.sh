@@ -7,7 +7,7 @@ APP_NAME="MLXLoRAStudio"
 BUNDLE_ID="io.github.goekdeniz-guelmez.mlx-lora-studio"
 MIN_SYSTEM_VERSION="14.0"
 APP_ARCHITECTURE="${APP_ARCHITECTURE:-arm64}"
-MLX_LM_LORA_VERSION="3.1.2"
+MLX_LM_LORA_VERSION="5.8.6"
 MLX_LM_LORA_REPOSITORY="https://github.com/Goekdeniz-Guelmez/mlx-lm-lora.git"
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"

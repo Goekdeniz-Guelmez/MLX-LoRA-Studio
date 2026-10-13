@@ -9,8 +9,10 @@ from unittest import mock
 TRAINERS = [
     ("cpo_trainer", "CPOTrainingArgs", "train_cpo", "cpo"),
     ("dpo_trainer", "DPOTrainingArgs", "train_dpo", "dpo"),
+    ("dsla_trainer", "DSLATrainingArgs", "train_dsla", "dsla"),
     ("ftpo_trainer", "FTPOTrainingArgs", "train_ftpo", "ftpo"),
     ("grpo_trainer", "GRPOTrainingArgs", "train_grpo", "grpo"),
+    ("klpo_trainer", "KLPOTrainingArgs", "train_klpo", "klpo"),
     ("online_dpo_trainer", "OnlineDPOTrainingArgs", "train_online_dpo", "online_dpo"),
     ("orpo_trainer", "ORPOTrainingArgs", "train_orpo", "orpo"),
     ("ppo_trainer", "PPOTrainingArgs", "train_ppo", "ppo"),
@@ -88,6 +90,8 @@ def install_training_runner_stubs():
         "grad_checkpoint": False,
         "gradient_accumulation_steps": 1,
         "efficient_long_context": False,
+        "recurrence_chunk_size": 64,
+        "micro_batch_size": None,
         "qat_enable": False,
         "qat_bits": 8,
         "qat_group_size": 64,
@@ -137,6 +141,18 @@ def install_training_runner_stubs():
         "importance_sampling_level": None,
         "alpha": [1e-5],
         "lm_studio_name": None,
+        "dsla_loss": "dpo",
+        "latent_weight": 0.1,
+        "latent_margin": 0.05,
+        "latent_gamma": 10.0,
+        "latent_variant": "both",
+        "latent_pooling": "answer_mean",
+        "latent_layer": "final",
+        "klpo_route": "token",
+        "klpo_kl_estimator": "mc",
+        "klpo_mc_samples": 128,
+        "klpo_top_k": 128,
+        "klpo_tail_floor": 1e-6,
     }
     train.build_lora_config = lambda _args: {"rank": 8}
     train.evaluate_model = mock.Mock()
@@ -264,6 +280,29 @@ class TrainingRunnerTests(unittest.TestCase):
                 "reference_model_path": "ref-model",
             },
             "orpo": {"beta": 0.2, "reward_scaling": 1.5},
+            "dsla": {
+                "loss_type": "cpo",
+                "dpo_cpo_loss_type": "ipo",
+                "beta": 0.2,
+                "delta": 7.0,
+                "latent_weight": 0.2,
+                "latent_margin": 0.1,
+                "latent_gamma": 5.0,
+                "latent_variant": "direction",
+                "latent_pooling": "last_token",
+                "latent_layer": "-4",
+            },
+            "klpo": {
+                "beta": 0.2,
+                "route": "sequence",
+                "kl_estimator": "topk",
+                "mc_samples": 32,
+                "top_k": 64,
+                "tail_floor": 1e-5,
+                "max_completion_length": 64,
+                "temperature": 0.6,
+                "reward_weights": [0.25, 0.75],
+            },
             "grpo": {
                 "beta": 0.2,
                 "group_size": 3,
@@ -304,6 +343,7 @@ class TrainingRunnerTests(unittest.TestCase):
                 "reference_model_path": "ref-model",
                 "judge": "judge-model",
                 "max_completion_length": 64,
+                "micro_batch_size": 2,
             },
             "xpo": {
                 "beta": 0.2,
@@ -368,6 +408,20 @@ class TrainingRunnerTests(unittest.TestCase):
                         "grpo_loss_type": "dr_grpo",
                         "importance_sampling_level": "sequence",
                         "alpha": "[0.00001, 0.00002]",
+                        "recurrence_chunk_size": 32,
+                        "micro_batch_size": 2,
+                        "dsla_loss": "cpo",
+                        "latent_weight": 0.2,
+                        "latent_margin": 0.1,
+                        "latent_gamma": 5.0,
+                        "latent_variant": "direction",
+                        "latent_pooling": "last_token",
+                        "latent_layer": "-4",
+                        "klpo_route": "sequence",
+                        "klpo_kl_estimator": "topk",
+                        "klpo_mc_samples": 32,
+                        "klpo_top_k": 64,
+                        "klpo_tail_floor": 1e-5,
                     }
                 )
 
@@ -386,8 +440,9 @@ class TrainingRunnerTests(unittest.TestCase):
                     "max_seq_length": 256,
                     "grad_checkpoint": True,
                     "gradient_accumulation_steps": 3,
+                    "recurrence_chunk_size": 32,
                 }
-                if mode != "ftpo":
+                if mode not in {"ftpo", "klpo"}:
                     common_args.update(
                         {
                             "qat_enable": True,
@@ -406,6 +461,9 @@ class TrainingRunnerTests(unittest.TestCase):
                 for key, value in expected_extra_args[mode].items():
                     self.assertEqual(getattr(training_args, key), value)
 
+                if mode in runner.MICRO_BATCH_MODES:
+                    self.assertEqual(training_args.micro_batch_size, 2)
+
                 if mode in runner.REFERENCE_MODES:
                     stubs.train.load_reference_model.assert_called_once()
                     self.assertEqual(call["ref_model"], "reference")
@@ -421,7 +479,7 @@ class TrainingRunnerTests(unittest.TestCase):
                 else:
                     stubs.train.load_judge_model.assert_not_called()
 
-                if mode == "grpo":
+                if mode in runner.REWARD_FUNCTION_MODES:
                     stubs.train.load_reward_functions_from_file.assert_called_once_with(
                         "/tmp/rewards.py"
                     )
@@ -524,6 +582,57 @@ class TrainingRunnerTests(unittest.TestCase):
 
         with mock.patch.object(runner.mx, "get_peak_memory", return_value=2_000):
             guard.check("testing")
+
+    def test_dsla_dpo_loads_reference_and_drops_long_context(self):
+        runner, stubs = load_training_runner()
+        args = runner._normalize_spec(
+            {
+                "train_mode": "dsla",
+                "dsla_loss": "dpo",
+                "adapter_path": "adapters",
+                "efficient_long_context": True,
+                "fuse": False,
+            }
+        )
+
+        self.assertFalse(args.efficient_long_context)
+        self.assertIsNone(args.seq_step_size)
+        runner.run(args)
+
+        stubs.train.load_reference_model.assert_called_once()
+        call = stubs.trainer_calls["dsla"].call_args.kwargs
+        self.assertEqual(call["ref_model"], "reference")
+        self.assertEqual(call["args"].loss_type, "dpo")
+
+    def test_judge_modes_require_a_judge(self):
+        runner, _stubs = load_training_runner()
+        for mode in ("online_dpo", "ppo", "rlhf_reinforce", "xpo"):
+            with self.subTest(train_mode=mode):
+                with self.assertRaisesRegex(ValueError, "requires a judge model"):
+                    runner._normalize_spec(
+                        {"train_mode": mode, "adapter_path": "adapters", "judge": " "}
+                    )
+
+    def test_invalid_klpo_estimator_is_rejected(self):
+        runner, _stubs = load_training_runner()
+        with self.assertRaisesRegex(ValueError, "klpo_kl_estimator"):
+            runner._normalize_spec(
+                {
+                    "train_mode": "klpo",
+                    "adapter_path": "adapters",
+                    "klpo_kl_estimator": "exact",
+                }
+            )
+
+    def test_dsla_test_metrics_are_parsed(self):
+        runner, _stubs = load_training_runner()
+        metrics = runner._test_metrics_from_output(
+            "DSLA Test loss: 0.512\nChosen reward: 1.250, rejected reward: -0.750\n",
+            10,
+        )
+        self.assertEqual(metrics["test_loss"], 0.512)
+        self.assertEqual(metrics["test_chosen_reward"], 1.25)
+        self.assertEqual(metrics["test_rejected_reward"], -0.75)
 
 
 if __name__ == "__main__":

@@ -46,7 +46,7 @@ struct AlgorithmGuideView: View {
         VStack(alignment: .leading, spacing: 10) {
             Text("How to read this page")
                 .font(.headline)
-            Text("mlx-lm-lora 3.0.0 ships ten training algorithms, grouped into three families: **supervised** (SFT), **preference** (DPO, FTPO, CPO, ORPO), and **reinforcement / online** (GRPO, Online DPO, XPO, RLHF-REINFORCE, PPO). Tapping a card in **Training loops** below opens its full wiki article.")
+            Text("mlx-lm-lora 5.8.6 ships twelve training algorithms, grouped into three families: **supervised** (SFT), **preference** (DPO, DSLA, FTPO, CPO, ORPO), and **reinforcement / online** (GRPO, KLPO, Online DPO, XPO, RLHF-REINFORCE, PPO). Tapping a card in **Training loops** below opens its full wiki article.")
                 .fixedSize(horizontal: false, vertical: true)
             Text("Under **Foundations** you will find the four pieces that are orthogonal to the choice of loss: the **adaptation method** that decides which tensors are trainable (LoRA / DoRA / full), the **optimizer** that turns gradients into updates (Adam, AdamW, Muon), the **load-time quantisation** of the base model (4 / 6 / 8 / MXFP4 bit), and **Quantization-Aware Training** that simulates a quantised forward pass so the trained adapter survives deployment quantisation.")
                 .fixedSize(horizontal: false, vertical: true)
@@ -122,6 +122,8 @@ struct AlgorithmGuideView: View {
             HStack(spacing: 6) {
                 if mode.needsReference {
                     InfoPill(text: "Reference", symbol: "person.2")
+                } else if mode == .dsla {
+                    InfoPill(text: "Reference (DPO)", symbol: "person.2")
                 }
                 if mode.needsJudge {
                     InfoPill(text: "Judge", symbol: "scales")
@@ -273,6 +275,12 @@ private struct AlgorithmArticle: View {
 
             The reference is normally the base model you started from. Loading a different one (e.g. an instruction-tuned SFT checkpoint) shifts the implicit reward baseline and is a common knob for steering the resulting behaviour.
             """
+        case .dsla:
+            """
+            **DSLA (Directional and Similarity-aware Latent Alignment)** keeps a standard preference objective (DPO, ORPO, or CPO, chosen with `dsla_loss`) and adds a regulariser on the model's **hidden states**. For each pair it pools the chosen and rejected response representations and pushes the chosen one to sit closer to the prompt (the *similarity* term) and to point along the batch's shared chosen-minus-rejected direction (the *direction* term).
+
+            DSLA-DPO loads a frozen reference model; DSLA-ORPO and DSLA-CPO are reference-free. It reads the same `prompt` / `chosen` / `rejected` rows as DPO.
+            """
         case .ftpo:
             """
             **Final Token Preference Optimisation (FTPO)** repairs reasoning doom loops using Antidoom examples. Instead of optimizing whole responses, it compares the policy and a frozen reference at the next-token distribution after a supplied context, raises probability for several acceptable next tokens, and suppresses the rejected token.
@@ -292,6 +300,12 @@ private struct AlgorithmArticle: View {
             **GRPO (DeepSeekMath, 2024)** is an RL loop that does not need a learned reward model. For every prompt it samples `group_size` completions from the current policy, scores each completion with one or more user-supplied **reward functions** (format checks, accuracy checks, int-format, etc.), and computes a group-relative advantage: `A_i = (r_i − mean(r)) / (std(r) + ε)`. The PPO-style clipped objective is then applied at the token level.
 
             The KL term against the reference model is optional but recommended when the policy starts to drift in a way the rewards do not penalise.
+            """
+        case .klpo:
+            """
+            **KLPO (KL-Regularized Policy Optimization)** is a critic-free RL loop for verifiable rewards. It samples **one** complete response per prompt, scores it with the same reward functions as GRPO, and regresses the policy toward a reward-tilted target while estimating the KL to the sampling policy directly from what the sampler saw.
+
+            Unlike GRPO it has no group normalisation, no PPO ratio clipping, and no reference model, so it is cheaper per prompt. `klpo_route` picks token- or sequence-level regression and `klpo_kl_estimator` picks how the conditional KL is estimated.
             """
         case .onlineDPO:
             """
@@ -333,6 +347,13 @@ private struct AlgorithmArticle: View {
             • The implicit reward is `β · log(π_θ(chosen) / π_ref(chosen)) − β · log(π_θ(rejected) / π_ref(rejected))`. A larger `β` makes the loss more aggressive, a smaller one softer.
             • `loss_type = "sigmoid"` is the original DPO; `hinge` is a margin-style loss; `ipo` regularises toward a constant target (more robust to noise); `dpop` adds an explicit reference-drift penalty scaled by `delta`.
             """
+        case .dsla:
+            """
+            • The preference term still decides *which* answer wins; the latent term shapes *how* the model represents the winner.
+            • Similarity: the pooled chosen state should be closer (cosine) to the prompt state than the rejected one, by at least `latent_margin`.
+            • Direction: every pair's chosen-minus-rejected vector should agree with the batch average, so the model learns one consistent "better" direction.
+            • `latent_weight` balances the two parts; `latent_gamma` controls how sharply the soft margins kick in.
+            """
         case .ftpo:
             """
             • Each row provides the full chat-templated context, one rejected continuation, and one or more acceptable continuations.
@@ -357,6 +378,12 @@ private struct AlgorithmArticle: View {
             • Advantages are computed per prompt group, so the absolute scale of the reward functions does not matter — only their *relative* ordering within a group. This is what makes GRPO robust to reward function magnitude.
             • Importance sampling lets you decide whether the PPO ratio is a per-token quantity (default, `token`) or averaged across the sequence (`sequence`, more stable per the GSPO paper).
             • KL is optional. Set `beta = 0.0` to disable it; the trainer falls back to a Schulman-style unbiased estimator for logging only.
+            """
+        case .klpo:
+            """
+            • Each sampled token gets a target `R − β · (log π_θ − log π_sampler)`: high reward pulls it up, drifting too far from the sampler pulls it back.
+            • Because only one completion per prompt is needed, KLPO spends less generation time per step than GRPO with a group of 4–8.
+            • The KL estimator is the main accuracy/cost knob: `mc` draws auxiliary samples, `topk` keeps the sampler's head plus a tail bucket, `full` uses the whole vocabulary, and `binary` is the cheapest.
             """
         case .onlineDPO:
             """
@@ -416,6 +443,16 @@ private struct AlgorithmArticle: View {
                     "**ℒ**₍DPO₎   =  − log σ( β · logits )                                                  (sigmoid)\n=  max( 0,  1 − β · logits )                                                (hinge)\n=  ( logits − 1 ⁄ (2β) )²                                                  (ipo)\n=  − log σ( β · logits )  +  δ · max( 0,  log π_ref(*y*₍c₎|*x*) − log π_θ(*y*₍c₎|*x*) )    (dpop)",
                 ]
             )
+        case .dsla:
+            return (
+                prose: "`h` are pooled hidden states (pooling set by `latent_pooling`, layer by `latent_layer`); `p` is the mean prompt state. `variant = both` averages the two latent losses.",
+                equations: [
+                    "m_sim  =  cos( p, h₍c₎ )  −  cos( p, h₍r₎ )",
+                    "ℒ_sim  =  log( 1 + exp( γ · ( margin − m_sim ) ) )",
+                    "d  =  normalize( mean_batch( h₍c₎ − h₍r₎ ) ),      ℒ_dir  =  − log σ( γ · cos( h₍c₎ − h₍r₎, d ) )",
+                    "**ℒ**₍DSLA₎   =  **ℒ**₍pref₎ (DPO | ORPO | CPO)  +  λ_latent · ℒ_latent",
+                ]
+            )
         case .ftpo:
             return (
                 prose: "FTPO combines a clipped preference loss over chosen-versus-rejected next-token logits with MSE penalties against the frozen reference distribution.",
@@ -450,6 +487,14 @@ private struct AlgorithmArticle: View {
                     "**ℒ**₍clip₎    =  − min( ratio · *A*,  clip( ratio,  1−ε_low,  1+ε_high ) · *A* )",
                     "**ℒ**₍KL₎      =  β · ( ratio · (π_ref ⁄ π_θ)  −  log(π_ref ⁄ π_θ)  −  1 )                      (unbiased KL)",
                     "**ℒ**₍GRPO₎    =  ( **ℒ**₍clip₎  +  **ℒ**₍KL₎ )   averaged over valid tokens",
+                ]
+            )
+        case .klpo:
+            return (
+                prose: "For one sampled response `*y*` with terminal reward `*R*`, sampler log-probs `log μ`, and the token route. The correction term depends on `klpo_kl_estimator` (the MC average, the Top-K head plus tail, or the full distribution).",
+                equations: [
+                    "*h*<sub>t</sub>   =  stop_grad( *R*  −  β · ( log π_θ(*y*<sub>t</sub>)  −  log μ(*y*<sub>t</sub>) ) )",
+                    "**ℒ**₍KLPO₎   =  − ∑<sub>t</sub>  *h*<sub>t</sub> · ( log π_θ(*y*<sub>t</sub>)  −  correction<sub>t</sub> )",
                 ]
             )
         case .onlineDPO:
@@ -570,9 +615,11 @@ private struct AlgorithmArticle: View {
             .init(setting: "grad_checkpoint", defaultValue: "true",
                   explanation: "Rewrites every transformer layer's forward to use `mx.checkpoint`. Roughly halves activation memory at the cost of one extra recompute per layer."),
             .init(setting: "efficient_long_context", defaultValue: "false",
-                  explanation: "Splits long sequences into `seq_step_size` chunks and reuses the KV-cache between them. Enable when `max_seq_length` is large and you are OOM-ing."),
+                  explanation: "Splits long sequences into `seq_step_size` chunks and reuses the KV-cache between them. Supported by SFT, DPO, CPO, and ORPO. Enable when `max_seq_length` is large and you are OOM-ing."),
             .init(setting: "seq_step_size", defaultValue: "512",
                   explanation: "Chunk size used by `efficient_long_context`. 256–1024 is a reasonable range; smaller = less memory, more recompute."),
+            .init(setting: "recurrence_chunk_size", defaultValue: "64",
+                  explanation: "Block size for the memory-safe recurrent training path used by hybrid and SSM models (Qwen3.5 / Qwen3-Next, Kimi Linear, Mamba, Jamba, Nemotron-H and others). Smaller = less memory, more recompute. Ignored for plain transformers."),
             .init(setting: "mask_prompt", defaultValue: "false",
                   explanation: "If true, the loss is only computed over the completion portion of the example (the prompt is masked out). SFT and DPO enforce this internally; the flag is for custom datasets."),
             .init(setting: "fuse", defaultValue: "true",
@@ -619,6 +666,28 @@ private struct AlgorithmArticle: View {
                       explanation: "Path or HF id of the frozen reference model. If empty, the trainer instantiates a second copy of the base model (doubles the GPU memory)."),
                 .init(setting: "prompt_feature / chosen_feature / rejected_feature", defaultValue: "auto",
                       explanation: "Column-name overrides for the preference schema."),
+            ]
+
+        case .dsla:
+            return [
+                .init(setting: "dsla_loss", defaultValue: "dpo",
+                      explanation: "Underlying preference objective: `dpo` (needs a reference), `orpo`, or `cpo` (both reference-free)."),
+                .init(setting: "beta / dpo_cpo_loss_type / delta", defaultValue: "0.1 / sigmoid / 50.0",
+                      explanation: "Passed to the preference objective exactly as for DPO/CPO. ORPO uses `beta` as the preference-term weight."),
+                .init(setting: "latent_weight", defaultValue: "0.1",
+                      explanation: "Weight of the hidden-state regulariser relative to the preference loss."),
+                .init(setting: "latent_margin", defaultValue: "0.05",
+                      explanation: "Target cosine gap between chosen and rejected prompt similarity."),
+                .init(setting: "latent_gamma", defaultValue: "10.0",
+                      explanation: "Sharpness of the soft-margin losses. Must be positive."),
+                .init(setting: "latent_variant", defaultValue: "both",
+                      explanation: "`similarity`, `direction`, or `both` (their average)."),
+                .init(setting: "latent_pooling", defaultValue: "answer_mean",
+                      explanation: "How response states are pooled: `answer_mean`, `last_token`, `last_k_mean` (last 8 tokens), or `prompt_answer_mean`."),
+                .init(setting: "latent_layer", defaultValue: "final",
+                      explanation: "`final`, `middle`, `late`, or a zero-based block index."),
+                .init(setting: "reference_model_path", defaultValue: "—",
+                      explanation: "Only used by DSLA-DPO. Empty loads a frozen copy of the base model."),
             ]
 
         case .ftpo:
@@ -676,6 +745,24 @@ private struct AlgorithmArticle: View {
                       explanation: "`grpo` (mean over all tokens), `bnpo` (normalised by the actual token count), or `dr_grpo` (divided by `batch_size · max_tokens`)."),
                 .init(setting: "reference_model_path", defaultValue: "—",
                       explanation: "Path or HF id of the reference model used both for KL and (when `importance_sampling_level != none`) for the importance ratio."),
+            ]
+
+        case .klpo:
+            return [
+                .init(setting: "beta", defaultValue: "0.1",
+                      explanation: "KL regularisation strength in the per-token target."),
+                .init(setting: "klpo_route", defaultValue: "token",
+                      explanation: "`token` regresses every sampled token; `sequence` regresses the whole response."),
+                .init(setting: "klpo_kl_estimator", defaultValue: "mc",
+                      explanation: "`mc` (auxiliary samples), `topk` (sampler head plus tail), `binary` (cheapest), or `full` (exact over the vocabulary, most memory)."),
+                .init(setting: "klpo_mc_samples", defaultValue: "128",
+                      explanation: "Auxiliary draws per visited prefix for the MC estimator."),
+                .init(setting: "klpo_top_k / klpo_tail_floor", defaultValue: "128 / 1e-6",
+                      explanation: "Head size and minimum tail probability for the Top-K estimator."),
+                .init(setting: "max_completion_length / temperature", defaultValue: "512 / 1.0",
+                      explanation: "Sampler settings for the one response collected per prompt."),
+                .init(setting: "reward_functions / reward_functions_file / reward_weights", defaultValue: "—",
+                      explanation: "Same reward callbacks as GRPO. Empty uses the default R1 reward family."),
             ]
 
         case .onlineDPO:
@@ -776,6 +863,12 @@ private struct AlgorithmArticle: View {
 
             The bundled default is `mlx-community/Human-Like-DPO`, which has the prompt/chosen/rejected shape.
             """
+        case .dsla:
+            """
+            DSLA uses the DPO row shape: `prompt`, `chosen`, `rejected`, and an optional `system`. The rendered generation prompt must be an exact token prefix of both responses, so check unusual chat templates first.
+
+            The bundled default is `mlx-community/Human-Like-DPO`.
+            """
         case .ftpo:
             """
             FTPO accepts a Hugging Face dataset repository or local Antidoom JSONL files (`train.jsonl`, optionally `valid.jsonl` and `test.jsonl`). Every row must contain `context_with_chat_template`, `rejected_decoded`, and `multi_chosen_decoded`. The final field contains one or more acceptable next-token continuations.
@@ -795,6 +888,12 @@ private struct AlgorithmArticle: View {
             GRPO needs at minimum a `prompt` field and, for the default `r1_*` reward functions, an `answer` field. The 4-tuple the trainer produces per row is `(prompt_tokens, answer_tokens, prompt_text, answer_text)`; an optional 5th element is the `type` used to switch reward functions per category.
 
             The bundled default is `mlx-community/Dolci-Think-RL-7B-2k`, a reasoning dataset.
+            """
+        case .klpo:
+            """
+            KLPO reads the same rows as GRPO: a `prompt` field and, for the default `r1_*` rewards, an `answer` field (optional `system` and `type`).
+
+            The bundled default is `mlx-community/Dolci-Think-RL-7B-2k`.
             """
         case .onlineDPO, .xpo, .rlhfReinforce, .ppo:
             """
@@ -821,6 +920,10 @@ private struct AlgorithmArticle: View {
 
             Use `loss_type=ipo` if you have noisy or contradictory labels, `loss_type=dpop` if the policy starts drifting from the reference in ways the SFT loss did not catch.
             """
+        case .dsla:
+            """
+            When plain DPO or ORPO wins the preference metric but the model's answers still drift off-topic. DSLA adds representation-level supervision for little extra compute. Pick `dsla_loss = orpo` or `cpo` to skip the reference model on tight memory.
+            """
         case .ftpo:
             """
             Use FTPO for a focused repair pass when a reasoning model repeatedly enters known bad continuation loops and you have generated Antidoom rows identifying the rejected branch and acceptable alternatives. It is not a replacement for broad SFT or DPO alignment.
@@ -836,6 +939,10 @@ private struct AlgorithmArticle: View {
         case .grpo:
             """
             When you have a *verifiable* reward (math correctness, code execution, format compliance) rather than a labelled preference dataset. GRPO is the workhorse behind recent reasoning models (DeepSeek-R1, Qwen3-Instruct reasoning mode). Expect completions to look very different from SFT outputs — that is the point.
+            """
+        case .klpo:
+            """
+            When you have verifiable rewards like GRPO but want fewer generations per step, or GRPO's group normalisation is unstable on your reward. Start with the token route and the MC estimator.
             """
         case .onlineDPO:
             """
@@ -888,6 +995,12 @@ private struct AlgorithmArticle: View {
                 "If you see NaNs, the most common cause is `loss_type=dpop` with `delta` too large for the current `lr`. Drop `delta` to 10 first.",
                 "`efficient_long_context` applies here too — preference datasets with long answers (e.g. full document diffs) benefit from chunked forward passes.",
             ]
+        case .dsla:
+            [
+                "Watch `latent_sim_margin` and `latent_dir_margin` in the live metrics. Both should rise; if they stay flat, raise `latent_weight`.",
+                "Efficient long context is not supported. Use gradient checkpointing and the recurrence chunk size to save memory instead.",
+                "QAT works with DSLA, but only bits, group size, and start step apply.",
+            ]
         case .ftpo:
             [
                 "Validate Antidoom field names before a long run; FTPO intentionally does not accept ordinary DPO chosen/rejected rows.",
@@ -914,6 +1027,12 @@ private struct AlgorithmArticle: View {
                 "`clip_ratio_total` should be in the 0.05–0.2 range. Below that the advantage signal is too weak, above that the policy is moving too aggressively per step.",
                 "`importance_sampling_level = sequence` is a free stability win for reasoning tasks with long completions.",
                 "GRPO is the slowest of the loops because every step does a generation pass; expect 4–8x the wall-clock time of an SFT step at the same `batch_size`.",
+            ]
+        case .klpo:
+            [
+                "Start with `klpo_route = token`, `klpo_kl_estimator = mc`, and `beta = 0.1`.",
+                "If memory is tight, lower `klpo_mc_samples` or switch to the `binary` estimator; `full` stores the whole vocabulary per token.",
+                "Rewards are terminal, so a reward that is almost always 0 gives KLPO nothing to learn from. Check the reward mix on a few samples first.",
             ]
         case .onlineDPO:
             [

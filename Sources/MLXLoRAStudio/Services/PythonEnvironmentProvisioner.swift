@@ -139,10 +139,19 @@ enum PythonEnvironmentProvisioner {
         return result.stdout.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
-    private static func majorMinor(from version: String) -> String? {
+    /// mlx-lm-lora 5.x declares `python_requires >= 3.11`, so a new env
+    /// never inherits an older interpreter version from `basePython`.
+    static let minimumPythonMinor = 11
+
+    static func majorMinor(from version: String) -> String? {
         let parts = version.split(separator: ".")
-        guard parts.count >= 2 else { return nil }
-        return "\(parts[0]).\(parts[1])"
+        guard parts.count >= 2,
+              let major = Int(parts[0]),
+              let minor = Int(parts[1].prefix(while: { $0.isNumber })) else { return nil }
+        if major == 3, minor < minimumPythonMinor {
+            return "3.\(minimumPythonMinor)"
+        }
+        return "\(major).\(minor)"
     }
 
     private struct CapturedResult {

@@ -42,6 +42,7 @@ struct TrainingView: View {
                         CoreTrainingSection(config: $store.training)
                         FTPOSection(config: $store.training)
                         PreferenceSection(config: $store.training)
+                        DSLASection(config: $store.training)
                         GRPOSection(config: $store.training)
                         OnlinePreferenceSection(config: $store.training)
                         QATSection(config: $store.training)
@@ -114,8 +115,8 @@ private struct ModeStrip: View {
                 .foregroundStyle(.secondary)
             }
 
-            // The 8-mode segmented picker (SFT/DPO/CPO/ORPO/GRPO/Online
-            // DPO/XPO/RLHF Reinforce/PPO). We use the original
+            // The 12-mode segmented picker (SFT/DPO/DSLA/FTPO/CPO/ORPO/GRPO/
+            // KLPO/Online DPO/XPO/RLHF Reinforce/PPO). We use the original
             // segmented style — the wide rows make it easy to scan all
             // available algorithms at a glance, and a dropdown menu
             // hides the choice set behind a click. The user explicitly
@@ -351,10 +352,17 @@ private struct CoreTrainingSection: View {
             if config.gradCheckpoint {
                 NumberField("Gradient accumulation steps", value: $config.gradientAccumulationSteps)
             }
-            ToggleRow("Efficient long context", isOn: $config.efficientLongContext)
-            if config.efficientLongContext {
-                NumberField("Sequence step size", value: $config.seqStepSize)
+            if config.trainMode.supportsEfficientLongContext {
+                ToggleRow("Efficient long context", isOn: $config.efficientLongContext)
+                if config.efficientLongContext {
+                    NumberField("Sequence step size", value: $config.seqStepSize)
+                }
             }
+            NumberField("Recurrence chunk size", value: $config.recurrenceChunkSize)
+            Text("Block size for memory-safe training of hybrid and SSM models (Qwen3.5/Next, Kimi Linear, Mamba, Jamba, Nemotron-H). Smaller uses less memory; plain transformers ignore it.")
+                .foregroundStyle(.secondary)
+                .font(.callout)
+                .fixedSize(horizontal: false, vertical: true)
             ToggleRow("Mask prompt loss", isOn: $config.maskPrompt)
             if config.trainMode == .sft {
                 Picker("SFT loss", selection: $config.sftLossType) {
@@ -427,6 +435,7 @@ private struct PreferenceSection: View {
         let mode = config.trainMode
         if mode != .sft
             && mode != .ftpo
+            && mode != .klpo
             && mode != .onlineDPO
             && mode != .xpo
             && mode != .ppo
@@ -445,12 +454,49 @@ private struct PreferenceSection: View {
                     Text("IPO").tag("ipo")
                     Text("DPOP").tag("dpop")
                 }
-                if config.trainMode.needsReference {
+                if config.needsReferenceModel {
                     TextField("Reference model path", text: $config.referenceModelPath)
                 }
-                if config.trainMode.needsJudge {
-                    TextField("Judge model or human", text: $config.judge)
+            }
+            .formBlock()
+        }
+    }
+}
+
+private struct DSLASection: View {
+    @Binding var config: TrainingConfig
+
+    var body: some View {
+        if config.trainMode == .dsla {
+            VStack(alignment: .leading, spacing: 14) {
+                SectionTitle("DSLA Latent Alignment")
+                Picker("Preference objective", selection: $config.dslaLoss) {
+                    ForEach(DSLALossType.allCases) { Text($0.title).tag($0) }
                 }
+                .pickerStyle(.segmented)
+                Text(config.dslaLoss == .dpo
+                     ? "DSLA-DPO loads a frozen reference model."
+                     : "DSLA-\(config.dslaLoss.title) is reference-free.")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                HStack {
+                    FloatingField("Latent weight", value: $config.latentWeight)
+                    FloatingField("Margin", value: $config.latentMargin)
+                    FloatingField("Gamma", value: $config.latentGamma)
+                }
+                HStack {
+                    Picker("Variant", selection: $config.latentVariant) {
+                        ForEach(DSLALatentVariant.allCases) { Text($0.title).tag($0) }
+                    }
+                    Picker("Pooling", selection: $config.latentPooling) {
+                        ForEach(DSLALatentPooling.allCases) { Text($0.title).tag($0) }
+                    }
+                }
+                TextField("Latent layer (final, middle, late, or block index)", text: $config.latentLayer)
+                Text("Efficient long context isn't supported for DSLA. Use gradient checkpointing and the recurrence chunk size to save memory.")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
             .formBlock()
         }
@@ -462,31 +508,61 @@ private struct GRPOSection: View {
     @State private var showingRewardFileImporter = false
 
     var body: some View {
-        if config.trainMode == .grpo {
+        if config.trainMode.usesRewardFunctions {
             VStack(alignment: .leading, spacing: 14) {
-                SectionTitle("GRPO Generation And Rewards")
-                HStack {
-                    NumberField("Group", value: $config.groupSize)
-                    NumberField("Completion", value: $config.maxCompletionLength)
-                    FloatingField("Temp", value: $config.temperature)
-                    FloatingField("Epsilon", value: $config.epsilon)
-                }
-                HStack {
-                    FloatingField("Top P", value: $config.topP)
-                    NumberField("Top K", value: $config.topK)
-                    FloatingField("Min P", value: $config.minP)
-                    TextField("Epsilon high", text: $config.epsilonHigh)
-                }
-                HStack {
-                    Picker("GRPO Loss", selection: $config.grpoLossType) {
-                        Text("GRPO").tag("grpo")
-                        Text("BNPO").tag("bnpo")
-                        Text("DR GRPO").tag("dr_grpo")
+                if config.trainMode == .klpo {
+                    SectionTitle("KLPO Generation And Rewards")
+                    HStack {
+                        NumberField("Completion", value: $config.maxCompletionLength)
+                        FloatingField("Temp", value: $config.temperature)
+                        FloatingField("Beta", value: $config.beta)
                     }
-                    Picker("Importance", selection: $config.importanceSamplingLevel) {
-                        Text("Default").tag("")
-                        Text("Token").tag("token")
-                        Text("Sequence").tag("sequence")
+                    HStack {
+                        Picker("Route", selection: $config.klpoRoute) {
+                            ForEach(KLPORoute.allCases) { Text($0.title).tag($0) }
+                        }
+                        Picker("KL estimator", selection: $config.klpoKLEstimator) {
+                            ForEach(KLPOKLEstimator.allCases) { Text($0.title).tag($0) }
+                        }
+                    }
+                    if config.klpoKLEstimator == .mc {
+                        NumberField("MC samples", value: $config.klpoMCSamples)
+                    }
+                    if config.klpoKLEstimator == .topk {
+                        HStack {
+                            NumberField("Top-K head", value: $config.klpoTopK)
+                            FloatingField("Tail floor", value: $config.klpoTailFloor)
+                        }
+                    }
+                    Text("One sampled response per prompt, no reference model. MC and Binary are the cheapest estimators; Full keeps the whole vocabulary per token.")
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                } else {
+                    SectionTitle("GRPO Generation And Rewards")
+                    HStack {
+                        NumberField("Group", value: $config.groupSize)
+                        NumberField("Completion", value: $config.maxCompletionLength)
+                        FloatingField("Temp", value: $config.temperature)
+                        FloatingField("Epsilon", value: $config.epsilon)
+                    }
+                    HStack {
+                        FloatingField("Top P", value: $config.topP)
+                        NumberField("Top K", value: $config.topK)
+                        FloatingField("Min P", value: $config.minP)
+                        TextField("Epsilon high", text: $config.epsilonHigh)
+                    }
+                    HStack {
+                        Picker("GRPO Loss", selection: $config.grpoLossType) {
+                            Text("GRPO").tag("grpo")
+                            Text("BNPO").tag("bnpo")
+                            Text("DR GRPO").tag("dr_grpo")
+                        }
+                        Picker("Importance", selection: $config.importanceSamplingLevel) {
+                            Text("Default").tag("")
+                            Text("Token").tag("token")
+                            Text("Sequence").tag("sequence")
+                        }
                     }
                 }
                 VStack(alignment: .leading, spacing: 10) {
@@ -497,7 +573,7 @@ private struct GRPOSection: View {
                             config.useDefaultGRPORewardFunctions()
                         }
                         .buttonStyle(.borderless)
-                        .help("Clear custom selection so GRPO uses the backend default reward set.")
+                        .help("Clear the custom selection so the trainer uses the backend default reward set.")
                     }
                     ForEach(GRPORewardFunction.defaults) { reward in
                         GRPORewardFunctionRow(
@@ -598,7 +674,11 @@ private struct OnlinePreferenceSection: View {
                     if config.trainMode == .ppo {
                         FloatingField("Epsilon", value: $config.epsilon)
                     }
+                    NumberField("Micro batch", value: $config.microBatchSize)
                 }
+                Text("Micro batch bounds judge-scoring memory. 0 scores the whole batch at once.")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
                 Picker("Judge", selection: $config.judgeKind) {
                     ForEach(JudgeKind.allCases) { kind in
                         Text(kind.title).tag(kind)
@@ -609,7 +689,7 @@ private struct OnlinePreferenceSection: View {
                     applyJudgeKind(kind)
                 }
                 if config.judgeKind == .llm {
-                    TextField("Judge model", text: $config.judge)
+                    TextField("Judge model (required)", text: $config.judge)
                 }
                 HStack(alignment: .top, spacing: 12) {
                     InfoPill(text: "Judge: \(judgeDisplayName)", symbol: "scales")
@@ -632,7 +712,7 @@ private struct OnlinePreferenceSection: View {
     private var judgeDisplayName: String {
         let trimmed = config.judge.trimmingCharacters(in: .whitespacesAndNewlines)
         if config.judgeKind == .user { return "User / human" }
-        return trimmed.isEmpty ? "Default" : trimmed
+        return trimmed.isEmpty ? "Not set" : trimmed
     }
 
     private func applyJudgeKind(_ kind: JudgeKind) {
@@ -719,6 +799,12 @@ private struct QATSection: View {
     @Binding var config: TrainingConfig
 
     var body: some View {
+        if config.trainMode.supportsQAT {
+            qatBody
+        }
+    }
+
+    private var qatBody: some View {
         VStack(alignment: .leading, spacing: 14) {
             SectionTitle("QAT")
             ToggleRow("Enable QAT projection", isOn: qatEnableBinding)

@@ -58,6 +58,16 @@
 
 ---
 
+## mlx-lm-lora 5.8.6
+
+**The bundled backend is now `mlx-lm-lora` 5.8.6.** It adds two trainers and new memory controls:
+
+- **DSLA** (Directional and Similarity-aware Latent Alignment) on top of DPO, ORPO, or CPO.
+- **KLPO** (KL-Regularized Policy Optimization), a critic-free RL loop using the GRPO reward functions.
+- A **recurrence chunk size** setting and fast VJPs for hybrid and SSM models (Qwen3.5/Next, Kimi Linear, Mamba, Jamba).
+- **Micro-batched judge scoring** for Online DPO, XPO, PPO, and RLHF Reinforce.
+- Online RL modes now require an explicit judge model, and the backend needs **Python 3.11+**.
+
 ## Release v2.0.0
 
 **MLX LoRA Studio v2.0.0 updates the app for `mlx-lm-lora` 3.1.2.**
@@ -73,8 +83,8 @@ If you need detialed and longer explanations for the algorythms used, then visit
 
 - **Native macOS app for Apple Silicon** built with SwiftUI and AppKit.
 - **Fully local fine-tuning workflow** for MLX-compatible language models.
-- **10 training algorithms:** SFT, DPO, FTPO, CPO, ORPO, GRPO, Online DPO, XPO, RLHF Reinforce,
-  and PPO.
+- **12 training algorithms:** SFT, DPO, DSLA, FTPO, CPO, ORPO, GRPO, KLPO, Online DPO, XPO,
+  RLHF Reinforce, and PPO.
 - **Dynamic SFT objectives:** NLL, memory-bounded Chunked NLL, and Dynamic Fine-Tuning.
 - **Multiple training modes:** LoRA, DoRA, QLoRA at 4/6/8-bit, full fine-tuning, and
   Quantization-Aware Training (QAT).
@@ -108,8 +118,8 @@ exists to make that loop feel like using a normal Mac app:**
   metrics, the runs archive, and the export to Hugging Face.
 - **Local, on-device, private.** Your prompts, your model, your weights, your disk. No data
   leaves your Mac unless you choose to push it to the Hub at the end.
-- **Real algorithms, not toy versions.** SFT, DPO, FTPO, CPO, ORPO, GRPO, Online DPO, XPO,
-  RLHF Reinforce, PPO — with QLoRA, DoRA, full fine-tuning, and **Quantization-Aware Training (QAT)**.
+- **Real algorithms, not toy versions.** SFT, DPO, DSLA, FTPO, CPO, ORPO, GRPO, KLPO, Online DPO,
+  XPO, RLHF Reinforce, PPO — with QLoRA, DoRA, full fine-tuning, and **Quantization-Aware Training (QAT)**.
 - **Built for everyone.** A beginner can ship a LoRA-tuned Llama model on their M-series Mac
   without writing a line of code. An ML researcher can drop into the YAML config and pin
   every hyperparameter they care about.
@@ -146,11 +156,11 @@ exists to make that loop feel like using a normal Mac app:**
 
 ### 🧠 Training
 
-- **10 training algorithms** out of the box: SFT, DPO, FTPO, CPO, ORPO, GRPO, Online DPO, XPO,
-  RLHF Reinforce, PPO. Pick by use case, not by which one is wired up.
+- **12 training algorithms** out of the box: SFT, DPO, DSLA, FTPO, CPO, ORPO, GRPO, KLPO,
+  Online DPO, XPO, RLHF Reinforce, PPO. Pick by use case, not by which one is wired up.
 - **Selectable SFT losses:** NLL, Chunked NLL for lower peak memory, and DFT for emphasizing difficult tokens.
 - **LoRA, DoRA, QLoRA (4/6/8-bit), full fine-tuning, and QAT** (Quantization-Aware Training
-  for SFT/DPO/ORPO) — the same training surface as the underlying `mlx-lm-lora` CLI.
+  for SFT/DPO/ORPO/DSLA) — the same training surface as the underlying `mlx-lm-lora` CLI.
 - **Adapter resume** — point a new run at an existing adapter checkpoint and Studio picks
   up where the last run left off.
 - **Judge / reward model selection** for RL-style algorithms (GRPO, XPO, Online DPO, PPO,
@@ -488,7 +498,7 @@ The build script:
 
 1. Compiles all Swift files in `Sources/MLXLoRAStudio/` with `swiftc` against
    `SwiftUI` and `AppKit`.
-2. Fetches the pinned `mlx-lm-lora` 3.1.2 checkout when it is absent, then
+2. Fetches the pinned `mlx-lm-lora` 5.8.6 checkout when it is absent, then
    bundles it with the app icon and Python helper (`Backend/`) into
    `Contents/Resources/`. The checkout and Python environment remain local and
    are not committed to source control.
