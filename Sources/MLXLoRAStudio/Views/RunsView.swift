@@ -928,7 +928,7 @@ private struct SettingsGrid: View {
                 row("Train type", spec.trainType.title)
                 row("Optimizer", spec.optimizer.title)
                 row("Quantization", spec.quantization.title)
-                if spec.trainMode.needsReference, !spec.referenceModelPath.isEmpty {
+                if spec.needsReferenceModel, !spec.referenceModelPath.isEmpty {
                     row("Reference model", spec.referenceModelPath)
                 }
                 if spec.trainMode.needsJudge, !spec.judge.isEmpty {
@@ -957,6 +957,7 @@ private struct SettingsGrid: View {
             settingsGroup("Toggles") {
                 row("Grad checkpoint", spec.gradCheckpoint ? "on" : "off")
                 row("Efficient long context", spec.efficientLongContext ? "on" : "off")
+                row("Recurrence chunk", "\(spec.recurrenceChunkSize)")
                 row("Mask prompt", spec.maskPrompt ? "on" : "off")
                 row("Fuse", spec.fuse ? "on" : "off")
             }
@@ -1001,6 +1002,38 @@ private struct SettingsGrid: View {
                 if spec.trainMode == .rlhfReinforce {
                     row("Reward scaling", String(format: "%.2f", spec.rewardScaling))
                 }
+                if spec.trainMode.supportsMicroBatching, spec.microBatchSize > 0 {
+                    row("Micro batch", "\(spec.microBatchSize)")
+                }
+            }
+        case .dsla:
+            settingsGroup("DSLA") {
+                row("Objective", spec.dslaLoss.title)
+                row("β (beta)", String(format: "%.3f", spec.beta))
+                if spec.dslaLoss != .orpo {
+                    row("Loss type", spec.dpoCpoLossType)
+                }
+                row("Latent weight", String(format: "%.3f", spec.latentWeight))
+                row("Latent margin", String(format: "%.3f", spec.latentMargin))
+                row("Latent γ", String(format: "%.1f", spec.latentGamma))
+                row("Variant", spec.latentVariant.title)
+                row("Pooling", spec.latentPooling.title)
+                row("Layer", spec.latentLayer)
+            }
+        case .klpo:
+            settingsGroup("KLPO") {
+                row("β (beta)", String(format: "%.3f", spec.beta))
+                row("Route", spec.klpoRoute.title)
+                row("KL estimator", spec.klpoKLEstimator.title)
+                if spec.klpoKLEstimator == .mc {
+                    row("MC samples", "\(spec.klpoMCSamples)")
+                }
+                if spec.klpoKLEstimator == .topk {
+                    row("Top-K", "\(spec.klpoTopK)")
+                    row("Tail floor", String(format: "%.0e", spec.klpoTailFloor))
+                }
+                row("Max completion length", "\(spec.maxCompletionLength)")
+                row("Temperature", String(format: "%.2f", spec.temperature))
             }
         case .ftpo:
             settingsGroup("FTPO") {
