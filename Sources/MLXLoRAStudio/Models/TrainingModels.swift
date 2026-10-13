@@ -40,10 +40,12 @@ enum SidebarSection: String, CaseIterable, Identifiable {
 enum TrainMode: String, CaseIterable, Identifiable {
     case sft
     case dpo
+    case dsla
     case ftpo
     case cpo
     case orpo
     case grpo
+    case klpo
     case onlineDPO = "online_dpo"
     case xpo
     case rlhfReinforce = "rlhf_reinforce"
@@ -55,10 +57,12 @@ enum TrainMode: String, CaseIterable, Identifiable {
         switch self {
         case .sft: "SFT"
         case .dpo: "DPO"
+        case .dsla: "DSLA"
         case .ftpo: "FTPO"
         case .cpo: "CPO"
         case .orpo: "ORPO"
         case .grpo: "GRPO"
+        case .klpo: "KLPO"
         case .onlineDPO: "Online DPO"
         case .xpo: "XPO"
         case .rlhfReinforce: "RLHF Reinforce"
@@ -69,8 +73,8 @@ enum TrainMode: String, CaseIterable, Identifiable {
     var family: String {
         switch self {
         case .sft: "Supervised"
-        case .dpo, .ftpo, .cpo, .orpo: "Preference"
-        case .grpo, .onlineDPO, .xpo, .rlhfReinforce, .ppo: "RL / Online"
+        case .dpo, .dsla, .ftpo, .cpo, .orpo: "Preference"
+        case .grpo, .klpo, .onlineDPO, .xpo, .rlhfReinforce, .ppo: "RL / Online"
         }
     }
 
@@ -80,6 +84,8 @@ enum TrainMode: String, CaseIterable, Identifiable {
             "Learns from prompt/completion or chat examples. Best first step for style, domain, and instruction following."
         case .dpo:
             "Optimizes chosen responses over rejected responses using a frozen reference model."
+        case .dsla:
+            "Adds a hidden-state alignment term on top of DPO, ORPO, or CPO so chosen answers stay close to the prompt in latent space."
         case .ftpo:
             "Repairs reasoning doom loops by optimizing the final-token distribution from Antidoom preference rows."
         case .cpo:
@@ -88,6 +94,8 @@ enum TrainMode: String, CaseIterable, Identifiable {
             "Combines supervised learning and preference odds into one efficient preference objective."
         case .grpo:
             "Generates groups of completions and improves behavior with reward functions."
+        case .klpo:
+            "Samples one completion per prompt and regresses the policy toward a reward-tilted target with an explicit, estimated KL penalty."
         case .onlineDPO:
             "Samples completions during training and uses a judge to create online preferences."
         case .xpo:
@@ -102,10 +110,10 @@ enum TrainMode: String, CaseIterable, Identifiable {
     var datasetHint: String {
         switch self {
         case .sft: "Default: mlx-community/JOSIE-v2-Instruct-5K"
-        case .dpo, .cpo: "Default: mlx-community/Human-Like-DPO"
+        case .dpo, .cpo, .dsla: "Default: mlx-community/Human-Like-DPO"
         case .ftpo: "Default: mlx-community/gemma-3-27b-it-antislop-ftpo-preference-dataset"
         case .orpo: "Default: mlx-community/Josiefied-Qwen3-dpo-v1-flat"
-        case .grpo: "Default: mlx-community/Dolci-Think-RL-7B-2k"
+        case .grpo, .klpo: "Default: mlx-community/Dolci-Think-RL-7B-2k"
         case .onlineDPO, .xpo, .rlhfReinforce, .ppo: "Default: mlx-community/Human-Like-DPO"
         }
     }
@@ -119,7 +127,9 @@ enum TrainMode: String, CaseIterable, Identifiable {
         switch self {
         case .sft:
             "mlx-community/JOSIE-v2-Instruct-5K"
-        case .dpo, .cpo:
+        case .dpo, .cpo, .dsla:
+            // DSLA uses the DPO dataset class with a strict prompt-prefix
+            // check, so any prompt/chosen/rejected dataset works.
             "mlx-community/Human-Like-DPO"
         case .ftpo:
             "mlx-community/gemma-3-27b-it-antislop-ftpo-preference-dataset"
@@ -128,8 +138,8 @@ enum TrainMode: String, CaseIterable, Identifiable {
             // has `prompt` too, but the DPO examples in the upstream repo
             // use the flat version which has no `prompt`.
             "mlx-community/Josiefied-Qwen3-dpo-v1-flat"
-        case .grpo:
-            // GRPO needs a `prompt` field. gsm8k uses `question`/`answer`
+        case .grpo, .klpo:
+            // GRPO and KLPO share the prompt/answer dataset class. GRPO needs a `prompt` field. gsm8k uses `question`/`answer`
             // and fails; this reasoning dataset matches the official
             // `grpo_minimal.ipynb` example.
             "mlx-community/Dolci-Think-RL-7B-2k"
@@ -140,23 +150,45 @@ enum TrainMode: String, CaseIterable, Identifiable {
         }
     }
 
+    /// Whether the mode always loads a frozen reference model. DSLA only
+    /// needs one with its DPO objective; use
+    /// `TrainingConfig.needsReferenceModel` for the per-run answer.
     var needsReference: Bool {
         switch self {
         case .dpo, .ftpo, .grpo, .onlineDPO, .xpo, .rlhfReinforce, .ppo: true
-        case .sft, .cpo, .orpo: false
+        case .sft, .dsla, .cpo, .orpo, .klpo: false
         }
     }
 
     var needsJudge: Bool {
         switch self {
         case .onlineDPO, .xpo, .rlhfReinforce, .ppo: true
-        case .sft, .dpo, .ftpo, .cpo, .orpo, .grpo: false
+        case .sft, .dpo, .dsla, .ftpo, .cpo, .orpo, .grpo, .klpo: false
+        }
+    }
+
+    /// Modes that score generated samples with a judge and accept
+    /// `micro_batch_size` to bound that scoring memory.
+    var supportsMicroBatching: Bool { needsJudge }
+
+    /// Modes that read GRPO-style reward functions.
+    var usesRewardFunctions: Bool {
+        switch self {
+        case .grpo, .klpo: true
+        default: false
+        }
+    }
+
+    var supportsEfficientLongContext: Bool {
+        switch self {
+        case .sft, .dpo, .cpo, .orpo: true
+        default: false
         }
     }
 
     var supportsQAT: Bool {
         switch self {
-        case .sft, .dpo, .orpo: true
+        case .sft, .dpo, .dsla, .orpo: true
         default: false
         }
     }
@@ -173,6 +205,66 @@ enum SFTLossType: String, CaseIterable, Identifiable {
         case .nll: "NLL"
         case .chunkedNLL: "Chunked NLL"
         case .dft: "Dynamic Fine-Tuning"
+        }
+    }
+}
+
+enum DSLALossType: String, CaseIterable, Identifiable {
+    case dpo
+    case orpo
+    case cpo
+
+    var id: String { rawValue }
+    var title: String { rawValue.uppercased() }
+}
+
+enum DSLALatentVariant: String, CaseIterable, Identifiable {
+    case both
+    case similarity
+    case direction
+
+    var id: String { rawValue }
+    var title: String { rawValue.capitalized }
+}
+
+enum DSLALatentPooling: String, CaseIterable, Identifiable {
+    case answerMean = "answer_mean"
+    case lastToken = "last_token"
+    case lastKMean = "last_k_mean"
+    case promptAnswerMean = "prompt_answer_mean"
+
+    var id: String { rawValue }
+    var title: String {
+        switch self {
+        case .answerMean: "Answer mean"
+        case .lastToken: "Last token"
+        case .lastKMean: "Last-k mean"
+        case .promptAnswerMean: "Prompt + answer mean"
+        }
+    }
+}
+
+enum KLPORoute: String, CaseIterable, Identifiable {
+    case token
+    case sequence
+
+    var id: String { rawValue }
+    var title: String { rawValue.capitalized }
+}
+
+enum KLPOKLEstimator: String, CaseIterable, Identifiable {
+    case mc
+    case topk
+    case binary
+    case full
+
+    var id: String { rawValue }
+    var title: String {
+        switch self {
+        case .mc: "Monte Carlo"
+        case .topk: "Top-K"
+        case .binary: "Binary"
+        case .full: "Full vocabulary"
         }
     }
 }
@@ -559,11 +651,31 @@ struct TrainingConfig: Equatable {
     var ftpoContextFeature = "context_with_chat_template"
     var ftpoRejectedFeature = "rejected_decoded"
     var ftpoChosenFeature = "multi_chosen_decoded"
+    var recurrenceChunkSize = 64
+    var microBatchSize = 0
+    var dslaLoss: DSLALossType = .dpo
+    var latentWeight = 0.1
+    var latentMargin = 0.05
+    var latentGamma = 10.0
+    var latentVariant: DSLALatentVariant = .both
+    var latentPooling: DSLALatentPooling = .answerMean
+    var latentLayer = "final"
+    var klpoRoute: KLPORoute = .token
+    var klpoKLEstimator: KLPOKLEstimator = .mc
+    var klpoMCSamples = 128
+    var klpoTopK = 128
+    var klpoTailFloor = 0.000001
     var qatEnable = false
     var qatBits = 8
     var qatGroupSize = 64
     var qatStartStep = 1
     var qatInterval = 1
+
+    /// Whether this run loads a frozen reference model (DSLA only does
+    /// with its DPO objective).
+    var needsReferenceModel: Bool {
+        trainMode.needsReference || (trainMode == .dsla && dslaLoss == .dpo)
+    }
 
     var selectedGRPORewardFunctionNames: [String] {
         let names = rewardFunctions
@@ -683,6 +795,31 @@ struct TrainingConfig: Equatable {
         } else {
             spec["iters"] = iters
             spec["epochs"] = NSNull()
+        }
+        // mlx-lm-lora 5.x settings. Set outside the literal above to keep
+        // the Swift type checker fast on this large dictionary.
+        spec["efficient_long_context"] = efficientLongContext && trainMode.supportsEfficientLongContext
+        spec["recurrence_chunk_size"] = max(1, recurrenceChunkSize)
+        spec["qat_enable"] = qatEnable && trainMode.supportsQAT
+        if trainMode == .dsla {
+            let layer = latentLayer.trimmingCharacters(in: .whitespacesAndNewlines)
+            spec["dsla_loss"] = dslaLoss.rawValue
+            spec["latent_weight"] = latentWeight
+            spec["latent_margin"] = latentMargin
+            spec["latent_gamma"] = latentGamma
+            spec["latent_variant"] = latentVariant.rawValue
+            spec["latent_pooling"] = latentPooling.rawValue
+            spec["latent_layer"] = layer.isEmpty ? "final" : layer
+        }
+        if trainMode == .klpo {
+            spec["klpo_route"] = klpoRoute.rawValue
+            spec["klpo_kl_estimator"] = klpoKLEstimator.rawValue
+            spec["klpo_mc_samples"] = klpoMCSamples
+            spec["klpo_top_k"] = klpoTopK
+            spec["klpo_tail_floor"] = klpoTailFloor
+        }
+        if trainMode.supportsMicroBatching, microBatchSize > 0 {
+            spec["micro_batch_size"] = microBatchSize
         }
         if let lrSchedule = learningRateScheduleSpec {
             spec["lr_schedule"] = lrSchedule
@@ -1195,6 +1332,12 @@ extension TrainingConfig {
         if trainMode.needsJudge, !judge.isEmpty {
             parts += ["--judge", judge]
         }
+        if trainMode == .dsla {
+            parts += ["--dsla-loss", dslaLoss.rawValue]
+        }
+        if trainMode == .klpo {
+            parts += ["--klpo-route", klpoRoute.rawValue, "--klpo-kl-estimator", klpoKLEstimator.rawValue]
+        }
         return parts
             .map { $0.contains(" ") ? "\"\($0)\"" : $0 }
             .joined(separator: " ")
@@ -1245,6 +1388,20 @@ extension TrainingConfig {
         config.qatGroupSize = intValue(spec["qat_group_size"]) ?? config.qatGroupSize
         config.qatStartStep = intValue(spec["qat_start_step"]) ?? config.qatStartStep
         config.qatInterval = intValue(spec["qat_interval"]) ?? config.qatInterval
+        config.recurrenceChunkSize = intValue(spec["recurrence_chunk_size"]) ?? config.recurrenceChunkSize
+        config.microBatchSize = intValue(spec["micro_batch_size"]) ?? config.microBatchSize
+        config.klpoMCSamples = intValue(spec["klpo_mc_samples"]) ?? config.klpoMCSamples
+        config.klpoTopK = intValue(spec["klpo_top_k"]) ?? config.klpoTopK
+        config.latentWeight = doubleValue(spec["latent_weight"]) ?? config.latentWeight
+        config.latentMargin = doubleValue(spec["latent_margin"]) ?? config.latentMargin
+        config.latentGamma = doubleValue(spec["latent_gamma"]) ?? config.latentGamma
+        config.klpoTailFloor = doubleValue(spec["klpo_tail_floor"]) ?? config.klpoTailFloor
+        if let v = spec["dsla_loss"] as? String, let loss = DSLALossType(rawValue: v) { config.dslaLoss = loss }
+        if let v = spec["latent_variant"] as? String, let variant = DSLALatentVariant(rawValue: v) { config.latentVariant = variant }
+        if let v = spec["latent_pooling"] as? String, let pooling = DSLALatentPooling(rawValue: v) { config.latentPooling = pooling }
+        if let v = spec["latent_layer"] as? String { config.latentLayer = v }
+        if let v = spec["klpo_route"] as? String, let route = KLPORoute(rawValue: v) { config.klpoRoute = route }
+        if let v = spec["klpo_kl_estimator"] as? String, let estimator = KLPOKLEstimator(rawValue: v) { config.klpoKLEstimator = estimator }
 
         // Booleans
         config.test = boolValue(spec["test"]) ?? config.test
