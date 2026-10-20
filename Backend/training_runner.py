@@ -379,7 +379,9 @@ def _normalize_spec(spec: dict[str, Any]) -> SimpleNamespace:
     args = dict(CONFIG_DEFAULTS)
     args.update(spec)
     if args.get("data"):
-        args["data"] = _prepare_local_dataset_for_trainer(str(args["data"]))
+        args["data"] = _prepare_local_dataset_for_trainer(
+            _normalize_hf_dataset_reference(str(args["data"]))
+        )
     args["train"] = True
     args["config"] = None
     args["optimizer_config"] = args.get("optimizer_config") or {
@@ -395,7 +397,10 @@ def _normalize_spec(spec: dict[str, Any]) -> SimpleNamespace:
         "muon": {},
     }
     args["judge_config"] = args.get("judge_config") or {}
-    args["hf_dataset"] = args.get("hf_dataset") or None
+    hf_dataset = args.get("hf_dataset")
+    args["hf_dataset"] = (
+        _normalize_hf_dataset_reference(str(hf_dataset)) if hf_dataset else None
+    )
     args["lr_schedule"] = args.get("lr_schedule") or None
 
     # Sampling knobs and the judge system prompt are not in every
@@ -560,6 +565,47 @@ def _load_dataset_with_system_fallback(args, tokenizer):
         return load_dataset(args, tokenizer)
     finally:
         datasets_module.create_dataset = original_create_dataset
+
+
+_HF_DATASET_URL_PREFIXES = (
+    "https://huggingface.co/datasets/",
+    "http://huggingface.co/datasets/",
+    "https://www.huggingface.co/datasets/",
+    "http://www.huggingface.co/datasets/",
+    "www.huggingface.co/datasets/",
+    "huggingface.co/datasets/",
+    "https://huggingface.co/",
+    "http://huggingface.co/",
+    "https://www.huggingface.co/",
+    "http://www.huggingface.co/",
+    "www.huggingface.co/",
+    "huggingface.co/",
+)
+
+
+def _normalize_hf_dataset_reference(value: str) -> str:
+    """Turn a pasted Hugging Face URL into the bare ``owner/name`` repo id.
+
+    ``datasets.load_dataset`` -- used by ``mlx_lm_lora`` for both
+    ``args.data`` and ``args.hf_dataset`` -- expects a repo id.  Handed a
+    full ``https://huggingface.co/datasets/owner/name`` URL it treats the
+    string as a local path and the run dies with::
+
+        FileNotFoundError: Couldn't find any data file at
+        <cwd>/https:/huggingface.co/datasets/owner/name
+
+    Bare repo ids and local filesystem paths are returned unchanged.
+    """
+    trimmed = value.strip()
+    if not trimmed:
+        return value
+
+    lowered = trimmed.lower()
+    for prefix in _HF_DATASET_URL_PREFIXES:
+        if lowered.startswith(prefix):
+            repo_id = trimmed[len(prefix) :].split("?")[0].split("#")[0].strip("/")
+            return repo_id if repo_id.count("/") == 1 else trimmed
+    return trimmed
 
 
 def _prepare_local_dataset_for_trainer(data: str) -> str:

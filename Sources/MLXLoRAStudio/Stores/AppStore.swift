@@ -1132,6 +1132,51 @@ final class AppStore {
         return hasAdapterWeights(in: URL(fileURLWithPath: expanded, isDirectory: true))
     }
 
+    /// Normalises a user-typed Hugging Face reference to a bare
+    /// ``owner/name`` repo id.
+    ///
+    /// The dataset loader (`datasets.load_dataset`) expects a repo id.  A
+    /// pasted URL such as ``https://huggingface.co/datasets/owner/name`` is
+    /// treated as a local path instead and the run fails with
+    /// ``FileNotFoundError: Couldn't find any data file at
+    /// .../https:/huggingface.co/datasets/owner/name``.  The
+    /// ``owner--name`` shorthand is expanded as well.
+    static func normalizedHFReference(_ raw: String) -> String {
+        var value = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !value.isEmpty else { return value }
+
+        let lower = value.lowercased()
+        let prefixes = [
+            "https://huggingface.co/datasets/",
+            "http://huggingface.co/datasets/",
+            "https://www.huggingface.co/datasets/",
+            "http://www.huggingface.co/datasets/",
+            "www.huggingface.co/datasets/",
+            "huggingface.co/datasets/",
+            "https://huggingface.co/",
+            "http://huggingface.co/",
+            "https://www.huggingface.co/",
+            "http://www.huggingface.co/",
+            "www.huggingface.co/",
+            "huggingface.co/",
+        ]
+        for prefix in prefixes where lower.hasPrefix(prefix) {
+            value = String(value.dropFirst(prefix.count))
+            break
+        }
+
+        if let marker = value.firstIndex(where: { $0 == "?" || $0 == "#" }) {
+            value = String(value[..<marker])
+        }
+        while value.hasSuffix("/") {
+            value.removeLast()
+        }
+        if !value.contains("/") {
+            value = value.replacingOccurrences(of: "--", with: "/")
+        }
+        return value
+    }
+
     /// Adds a user-typed HF repo id to the custom list (used by the
     /// "Add HF repo…" sheet on the model/dataset dropdowns). Trims
     /// whitespace, ignores empty strings, and de-duplicates against
@@ -1139,10 +1184,9 @@ final class AppStore {
     func addCustomHFAsset(_ id: String, kind: HFCachedAsset.Kind) {
         let trimmed = id.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
-        // Accept both `owner/name` and `owner--name` to be forgiving.
-        let normalised = trimmed.contains("/")
-            ? trimmed
-            : trimmed.replacingOccurrences(of: "--", with: "/")
+        // Accept `owner/name`, the `owner--name` shorthand and full
+        // huggingface.co URLs; the dataset loader wants a bare repo id.
+        let normalised = Self.normalizedHFReference(trimmed)
         guard normalised.contains("/") else { return }
         switch kind {
         case .model:
