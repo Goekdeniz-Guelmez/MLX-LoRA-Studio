@@ -634,6 +634,27 @@ class TrainingRunnerTests(unittest.TestCase):
         self.assertEqual(metrics["test_chosen_reward"], 1.25)
         self.assertEqual(metrics["test_rejected_reward"], -0.75)
 
+    def test_preflight_passes_when_the_runtime_is_available(self):
+        runner, _stubs = load_training_runner()
+
+        self.assertEqual(runner._missing_runtime_modules(), [])
+
+    def test_preflight_reports_the_missing_runtime_modules(self):
+        runner, _stubs = load_training_runner()
+
+        with mock.patch.dict(sys.modules):
+            for name in ("mlx", "mlx_lm", "mlx_lm_lora"):
+                sys.modules.pop(name, None)
+            with mock.patch.object(
+                runner.importlib.util,
+                "find_spec",
+                side_effect=lambda name, package=None: None,
+            ):
+                self.assertEqual(
+                    sorted(runner._missing_runtime_modules()),
+                    ["mlx", "mlx_lm", "mlx_lm_lora"],
+                )
+
 
 if __name__ == "__main__":
     unittest.main()
