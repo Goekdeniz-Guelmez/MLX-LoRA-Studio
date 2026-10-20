@@ -1097,6 +1097,44 @@ PIPELINES = {
 }
 
 
+def _evaluate_test_split(
+    args,
+    model,
+    tokenizer,
+    reference_model,
+    judge_model,
+    judge_tokenizer,
+    test_set,
+) -> dict[str, float]:
+    """Evaluate the test split and return the parsed metrics.
+
+    Evaluation problems are reported and swallowed on purpose. A run that
+    trained fine must not throw away the adapter it just produced because
+    the optional test pass blew up -- the export step comes after this one.
+    """
+    test_output = TeeCapture()
+    try:
+        with contextlib.redirect_stdout(
+            test_output
+        ), contextlib.redirect_stderr(test_output):
+            evaluate_model(
+                args=args,
+                model=model,
+                tokenizer=tokenizer,
+                reference_model=reference_model,
+                judge_model=judge_model,
+                judge_tokenizer=judge_tokenizer,
+                test_set=test_set,
+            )
+    except Exception as exc:
+        studio_log(f"Test split evaluation failed: {type(exc).__name__}: {exc}")
+        studio_log(
+            "Continuing without test metrics; the adapter will still be saved."
+        )
+        return {}
+    return _test_metrics_from_output(test_output.buffer.getvalue(), args.iters)
+
+
 def run(args: SimpleNamespace) -> None:
     np.random.seed(args.seed)
     mx.random.seed(args.seed)
@@ -1192,21 +1230,14 @@ def run(args: SimpleNamespace) -> None:
                 studio_log("Skipping test split evaluation: no test rows were found.")
             else:
                 studio_log("Evaluating test split")
-                test_output = TeeCapture()
-                with contextlib.redirect_stdout(
-                    test_output
-                ), contextlib.redirect_stderr(test_output):
-                    evaluate_model(
-                        args=args,
-                        model=model,
-                        tokenizer=tokenizer,
-                        reference_model=reference_model,
-                        judge_model=judge_model,
-                        judge_tokenizer=judge_tokenizer,
-                        test_set=test_set,
-                    )
-                test_metrics = _test_metrics_from_output(
-                    test_output.buffer.getvalue(), args.iters
+                test_metrics = _evaluate_test_split(
+                    args=args,
+                    model=model,
+                    tokenizer=tokenizer,
+                    reference_model=reference_model,
+                    judge_model=judge_model,
+                    judge_tokenizer=judge_tokenizer,
+                    test_set=test_set,
                 )
                 if len(test_metrics) > 1:
                     studio_callback.on_test_loss_report(test_metrics)
