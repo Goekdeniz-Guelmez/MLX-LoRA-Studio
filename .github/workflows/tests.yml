@@ -1,0 +1,35 @@
+name: Tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: tests-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    name: Backend (Python)
+    runs-on: macos-15
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Select Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      # The backend test suite stubs out mlx / mlx_lm / mlx_lm_lora, so it
+      # only needs numpy. Installing the real mlx stack here would cost
+      # minutes per run and would not test anything extra.
+      - name: Install test dependencies
+        run: python -m pip install --upgrade pip numpy
+
+      - name: Run backend tests
+        run: python Tests/test_training_runner.py -v
