@@ -99,16 +99,16 @@ jobs:
         env:
           DEVELOPER_ID_CERTIFICATE_BASE64: ${{ secrets.APPLE_DEVELOPER_ID_CERTIFICATE_BASE64 }}
           DEVELOPER_ID_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_DEVELOPER_ID_CERTIFICATE_PASSWORD }}
-          JOSIE_CODESIGN_IDENTITY: ${{ secrets.APPLE_CODESIGN_IDENTITY }}
-          JOSIE_APPLE_ID: ${{ secrets.APPLE_NOTARY_APPLE_ID }}
-          JOSIE_TEAM_ID: ${{ secrets.APPLE_NOTARY_TEAM_ID }}
+          CODE_SIGN_IDENTITY: ${{ secrets.APPLE_CODESIGN_IDENTITY }}
+          NOTARY_APPLE_ID: ${{ secrets.APPLE_NOTARY_APPLE_ID }}
+          NOTARY_TEAM_ID: ${{ secrets.APPLE_NOTARY_TEAM_ID }}
           NOTARY_PASSWORD: ${{ secrets.APPLE_NOTARY_PASSWORD }}
         run: |
           if [[ -n "$DEVELOPER_ID_CERTIFICATE_BASE64" \
              && -n "$DEVELOPER_ID_CERTIFICATE_PASSWORD" \
-             && -n "$JOSIE_CODESIGN_IDENTITY" \
-             && -n "$JOSIE_APPLE_ID" \
-             && -n "$JOSIE_TEAM_ID" \
+             && -n "$CODE_SIGN_IDENTITY" \
+             && -n "$NOTARY_APPLE_ID" \
+             && -n "$NOTARY_TEAM_ID" \
              && -n "$NOTARY_PASSWORD" ]]; then
             echo "enabled=true" >> "$GITHUB_OUTPUT"
             echo "Developer ID signing and notarization are enabled."
@@ -141,22 +141,22 @@ jobs:
       - name: Store notarization credentials in runner keychain
         if: steps.signing.outputs.enabled == 'true'
         env:
-          JOSIE_NOTARY_PROFILE: mlx_lora_studio
-          JOSIE_APPLE_ID: ${{ secrets.APPLE_NOTARY_APPLE_ID }}
-          JOSIE_TEAM_ID: ${{ secrets.APPLE_NOTARY_TEAM_ID }}
+          NOTARY_PROFILE: mlx_lora_studio
+          NOTARY_APPLE_ID: ${{ secrets.APPLE_NOTARY_APPLE_ID }}
+          NOTARY_TEAM_ID: ${{ secrets.APPLE_NOTARY_TEAM_ID }}
           NOTARY_PASSWORD: ${{ secrets.APPLE_NOTARY_PASSWORD }}
         run: |
           set -euo pipefail
-          xcrun notarytool store-credentials "$JOSIE_NOTARY_PROFILE" \
-            --apple-id "$JOSIE_APPLE_ID" \
-            --team-id "$JOSIE_TEAM_ID" \
+          xcrun notarytool store-credentials "$NOTARY_PROFILE" \
+            --apple-id "$NOTARY_APPLE_ID" \
+            --team-id "$NOTARY_TEAM_ID" \
             --password "$NOTARY_PASSWORD"
 
       - name: Build the .app bundle
         env:
-          JOSIE_CODESIGN_IDENTITY: ${{ steps.signing.outputs.enabled == 'true' && secrets.APPLE_CODESIGN_IDENTITY || '-' }}
-          JOSIE_TEAM_ID: ${{ steps.signing.outputs.enabled == 'true' && secrets.APPLE_NOTARY_TEAM_ID || '' }}
-          JOSIE_NOTARY_PROFILE: ${{ steps.signing.outputs.enabled == 'true' && 'mlx_lora_studio' || '' }}
+          CODE_SIGN_IDENTITY: ${{ steps.signing.outputs.enabled == 'true' && secrets.APPLE_CODESIGN_IDENTITY || '-' }}
+          NOTARY_TEAM_ID: ${{ steps.signing.outputs.enabled == 'true' && secrets.APPLE_NOTARY_TEAM_ID || '' }}
+          NOTARY_PROFILE: ${{ steps.signing.outputs.enabled == 'true' && 'mlx_lora_studio' || '' }}
         run: |
           set -euxo pipefail
           ./script/build_and_run.sh --package

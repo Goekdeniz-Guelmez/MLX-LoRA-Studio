@@ -32,7 +32,7 @@ if [[ -f "$SIGNING_ENV_FILE" ]]; then
   source "$SIGNING_ENV_FILE"
 fi
 
-CODE_SIGN_IDENTITY="${CODE_SIGN_IDENTITY:-${JOSIE_CODESIGN_IDENTITY:--}}"
+CODE_SIGN_IDENTITY="${CODE_SIGN_IDENTITY:--}"
 
 ensure_vendored_backend() {
   local version_file="$MLX_LM_LORA_DIR/mlx_lm_lora/_version.py"
@@ -294,10 +294,10 @@ build_dmg() {
 notarize_dmg() {
   local dmg_path="$1"
   local args=(submit "$dmg_path")
-  local apple_id="${JOSIE_APPLE_ID:-${NOTARY_APPLE_ID:-}}"
-  local team_id="${JOSIE_TEAM_ID:-${NOTARY_TEAM_ID:-}}"
+  local apple_id="${NOTARY_APPLE_ID:-}"
+  local team_id="${NOTARY_TEAM_ID:-}"
   local notary_password="${NOTARY_PASSWORD:-}"
-  local notary_profile="${JOSIE_NOTARY_PROFILE:-}"
+  local notary_profile="${NOTARY_PROFILE:-}"
 
   if [[ -n "$notary_profile" ]]; then
     args+=(--keychain-profile "$notary_profile")
@@ -305,12 +305,12 @@ notarize_dmg() {
   elif [[ -n "$apple_id" && -n "$team_id" && -n "$notary_password" ]]; then
     args+=(--apple-id "$apple_id" --team-id "$team_id" --password "$notary_password")
   else
-    echo "Skipping notarization; configure JOSIE_NOTARY_PROFILE or all Apple ID credentials in $SIGNING_ENV_FILE."
+    echo "Skipping notarization; configure NOTARY_PROFILE or all Apple ID credentials in $SIGNING_ENV_FILE."
     return 0
   fi
 
   if [[ "$CODE_SIGN_IDENTITY" == "-" ]]; then
-    echo "Notarization requires a Developer ID signed app; set JOSIE_CODESIGN_IDENTITY." >&2
+    echo "Notarization requires a Developer ID signed app; set CODE_SIGN_IDENTITY." >&2
     return 1
   fi
 

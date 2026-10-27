@@ -503,12 +503,12 @@ cd mlx-lm-lora-app
 To sign a local package with Developer ID and notarize the DMG, copy
 `apple/signing.local.env.example` to `apple/signing.local.env`, set your Developer
 ID identity and team ID, create the suggested `notarytool` keychain profile, and
-set `JOSIE_NOTARY_PROFILE` to that profile name.
+set `NOTARY_PROFILE` to that profile name.
 The build script loads that ignored local file automatically. When a notary
 profile is configured, `--package`, `--release-assets`, and `--release-package`
-submit and staple the resulting DMG. You can instead provide `JOSIE_APPLE_ID`,
-`JOSIE_TEAM_ID`, and `NOTARY_PASSWORD`; the keychain profile is preferred so the
-app-specific password does not need to be stored in a file.
+submit and staple the resulting DMG. You can instead provide `NOTARY_APPLE_ID`,
+`NOTARY_TEAM_ID`, and `NOTARY_PASSWORD`; the keychain profile is preferred so
+the app-specific password does not need to be stored in a file.
 
 The build script:
 
