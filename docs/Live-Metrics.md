@@ -3,7 +3,7 @@
 Training should be inspectable while it runs. The Live Metrics view reads the trainer's reports and makes the most useful signals visible alongside the run log.
 
 <div class="doc-screenshot">
-  <img src="https://raw.githubusercontent.com/Goekdeniz-Guelmez/MLX-LoRA-Studio/main/Sources/Media/app_live_metrics.png" alt="MLX LoRA Studio live metrics view with loss, throughput, memory, learning rate, and recent training reports" loading="lazy">
+  <img src="https://raw.githubusercontent.com/Goekdeniz-Guelmez/MLX-LoRA-Studio/main/Sources/Media/app_live_metrics.png" alt="Full-screen live metrics for an ORPO run with loss, chosen and rejected rewards, throughput, memory, learning rate, and recent reports" loading="lazy">
 </div>
 
 ## What you can follow

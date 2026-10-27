@@ -3,7 +3,7 @@
 Training stays on your Mac. When you decide to share the resulting adapter, the upload flow can publish supported adapter outputs to Hugging Face without leaving Studio.
 
 <div class="doc-screenshot">
-  <img src="https://raw.githubusercontent.com/Goekdeniz-Guelmez/MLX-LoRA-Studio/main/Sources/Media/app_upload.png" alt="MLX LoRA Studio Hugging Face upload view for publishing a trained adapter" loading="lazy">
+  <img src="https://raw.githubusercontent.com/Goekdeniz-Guelmez/MLX-LoRA-Studio/main/Sources/Media/app_upload.png" alt="Full-screen Hugging Face upload page with separate model and dataset upload workflows and Hub settings" loading="lazy">
 </div>
 
 ## Review before publishing

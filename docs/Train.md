@@ -22,6 +22,17 @@ If a run is too large, try a smaller model, a shorter sequence, a smaller micro-
 
 For a first experiment, use a compatible instruct model, LoRA, a short sequence length, and a small representative dataset. Run a few steps, inspect the output and logs, and check that loss and validation behave as expected before committing to a longer run.
 
+## Small Hugging Face examples
+
+The full-screen demos in the [project README](https://github.com/Goekdeniz-Guelmez/MLX-LoRA-Studio#small-real-training-runs) use one base model across three methods: [HuggingFaceTB/SmolLM2-135M-Instruct](https://huggingface.co/HuggingFaceTB/SmolLM2-135M-Instruct). That 135M-parameter Hub checkpoint was converted to MLX format before training.
+
+| Use | Dataset | Rows and license | Expected fields |
+| --- | --- | --- | --- |
+| SFT | [d1272/MetaPrompt-Architect-500](https://huggingface.co/datasets/d1272/MetaPrompt-Architect-500) | 500 training examples · MIT | Chat `messages` |
+| DPO and ORPO demos | [Taichi11/dpo_dataset_v4](https://huggingface.co/datasets/Taichi11/dpo_dataset_v4) | 2,878 training examples · Apache-2.0 | `prompt`, `chosen`, `rejected`, `strategy` |
+
+The DPO and ORPO screenshots use the same 100-row slice of the preference dataset. Each demo ran for 10 steps to show the app workflow; the loss values are not a comparison of model quality. Confirm dataset columns and the selected method before starting your own run, then evaluate with held-out examples.
+
 ## Control a run
 
 Start, pause, resume, or stop the active job from the toolbar. The sidebar shows progress and live memory. When training ends, the configuration, log, and adapter are available in [Runs](Runs).
