@@ -82,7 +82,7 @@ Shared form: Model & Data; Fine-tune (LoRA/DoRA/Full + Quantization); Training S
 
 ## References
 
-- Schulman et al., 2017, *Proximal Policy Optimization Algorithms*.
+- [Schulman et al. (2017), *Proximal Policy Optimization Algorithms*](https://arxiv.org/abs/1707.06347).
 - Implementation: `vendor/mlx-lm-lora/mlx_lm_lora/trainer/ppo_trainer.py`.
 
 ## See also

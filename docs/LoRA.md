@@ -61,7 +61,7 @@ On the **Train** tab → **Fine-tune** section:
 
 ## References
 
-- Hu et al., 2021, *LoRA: Low-Rank Adaptation of Large Language Models*.
+- [Hu et al. (2021), *LoRA: Low-Rank Adaptation of Large Language Models*](https://arxiv.org/abs/2106.09685).
 - Implementation: `mlx_lm_lora.utils.from_pretrained` → `linear_to_lora_layers`.
 
 ## See also

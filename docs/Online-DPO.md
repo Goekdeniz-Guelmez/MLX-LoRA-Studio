@@ -75,7 +75,7 @@ Shared form: Model & Data; Fine-tune (LoRA/DoRA/Full + Quantization); Training S
 
 ## References
 
-- Online DPO inherits the DPO objective (Rafailov et al., 2023) applied to on-policy sampled pairs.
+- Online DPO applies the [DPO objective (Rafailov et al., 2023)](https://arxiv.org/abs/2305.18290) to preference pairs sampled and judged during training; this online sampling loop is the Studio trainer implementation.
 - Implementation: `vendor/mlx-lm-lora/mlx_lm_lora/trainer/online_dpo_trainer.py`, `judge.py`.
 
 ## See also

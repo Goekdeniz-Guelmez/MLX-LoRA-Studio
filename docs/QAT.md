@@ -73,7 +73,8 @@ The section is only effective for SFT, DPO, and ORPO (the only trainers that ins
 
 ## References
 
-- QAT with the straight-through estimator (Bengio et al., 2013, *Estimating or Propagating Gradients Through Stochastic Neurons*); the affine scheme mirrors `mlx.nn.quantize`.
+- Quantization-aware training foundation: [Jacob et al. (2018), *Quantization and Training of Neural Networks for Efficient Integer-Arithmetic-Only Inference*](https://arxiv.org/abs/1712.05877).
+- Straight-through estimator: [Bengio, Léonard, and Courville (2013), *Estimating or Propagating Gradients Through Stochastic Neurons*](https://arxiv.org/abs/1308.3432).
 - Implementation: `_install_qat_hooks` in `vendor/mlx-lm-lora/mlx_lm_lora/trainer/sft_trainer.py`.
 
 ## See also

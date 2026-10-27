@@ -26,4 +26,7 @@ The same rows as GRPO: a `prompt` field and, for the default `r1_*` rewards, an 
 - Lower MC samples or switch to the Binary estimator when memory is tight; Full keeps the whole vocabulary per token.
 - Rewards are terminal. A reward that is almost always zero gives KLPO nothing to learn from.
 
+## References
+
+- [Zhang (2026), *On KL-Regularized Policy Optimization*](https://arxiv.org/abs/2610.08963).
 - Implementation: `vendor/mlx-lm-lora/mlx_lm_lora/trainer/klpo_trainer.py`.
