@@ -47,6 +47,9 @@
 The repository currently vendors [`mlx-lm-lora` 5.10.2](vendor/mlx-lm-lora/), the Python
 training package behind the app. Studio runs its trainer locally on Apple Silicon and
 surfaces its settings, progress, logs, and saved adapters in a native macOS interface.
+Version 5.10.2 adds epoch-based training budgets and a read-only `calculate_iters` MCP tool,
+fixes completed-run detection after restarts, and makes Hugging Face dataset loading tolerate
+incomplete optional PyTorch namespaces.
 
 - **DSLA** (Directional and Similarity-aware Latent Alignment) extends DPO, ORPO, or CPO.
 - **KLPO** (KL-Regularized Policy Optimization) adds a critic-free RL loop using GRPO reward functions.
