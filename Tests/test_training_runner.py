@@ -744,6 +744,47 @@ class TrainingRunnerTests(unittest.TestCase):
         self.assertEqual(metrics["test_chosen_reward"], 1.25)
         self.assertEqual(metrics["test_rejected_reward"], -0.75)
 
+    def test_failed_test_evaluation_is_reported_not_raised(self):
+        runner, _stubs = load_training_runner()
+        runner.evaluate_model.side_effect = RuntimeError("boom")
+
+        metrics = runner._evaluate_test_split(
+            args=SimpleNamespace(iters=1),
+            model=object(),
+            tokenizer=object(),
+            reference_model=None,
+            judge_model=None,
+            judge_tokenizer=None,
+            test_set=[],
+        )
+
+        self.assertEqual(metrics, {})
+
+    def test_successful_test_evaluation_returns_metrics(self):
+        runner, _stubs = load_training_runner()
+        runner.evaluate_model.side_effect = None
+
+        def _emit(*_args, **_kwargs):
+            print("Test Results:")
+            print("  Loss: 0.512")
+            print("  Perplexity: 1.664")
+            print("  Tokens: 42")
+
+        runner.evaluate_model.side_effect = lambda *a, **k: _emit()
+
+        metrics = runner._evaluate_test_split(
+            args=SimpleNamespace(iters=1),
+            model=object(),
+            tokenizer=object(),
+            reference_model=None,
+            judge_model=None,
+            judge_tokenizer=None,
+            test_set=[],
+        )
+
+        self.assertEqual(metrics.get("test_loss"), 0.512)
+        self.assertEqual(metrics.get("test_ppl"), 1.664)
+
 
 if __name__ == "__main__":
     unittest.main()
