@@ -493,6 +493,10 @@ cd mlx-lm-lora-app
 # Build a release .dmg:
 ./script/build_and_run.sh --package
 
+# Build locally and upload the assets to a GitHub Release:
+gh auth login
+./script/build_and_run.sh --release-package
+
 # Open the .app in lldb:
 ./script/build_and_run.sh --debug
 
@@ -509,6 +513,8 @@ profile is configured, `--package`, `--release-assets`, and `--release-package`
 submit and staple the resulting DMG. You can instead provide `NOTARY_APPLE_ID`,
 `NOTARY_TEAM_ID`, and `NOTARY_PASSWORD`; the keychain profile is preferred so
 the app-specific password does not need to be stored in a file.
+`--release-package` uses the version in the `version` file, then creates or
+updates the matching GitHub release and uploads the DMG, checksum, and app ZIP.
 
 The build script:
 
@@ -548,7 +554,7 @@ provision one).
 ├── script/
 │   └── build_and_run.sh             # Builds .app + .dmg
 ├── Tests/
-├── .github/workflows/release.yml    # Tag-driven release pipeline
+├── .github/workflows/tests.yml      # Backend test workflow
 ├── Package.swift                    # SwiftPM manifest
 ├── version                          # Single source of truth for the app version
 └── README.md
