@@ -801,7 +801,7 @@ final class AppStore {
             guard let self else { return }
             markRun(runID, status: status == 0 ? "Finished" : "Failed")
             if continueTrainingQueue {
-                Task { await startNextQueuedTraining() }
+                Task { await self.startNextQueuedTraining() }
             }
             guard completionNotificationsEnabled,
                   let successTitle,
