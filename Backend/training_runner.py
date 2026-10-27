@@ -263,14 +263,50 @@ def _positive_float(value: Any, name: str) -> float:
     return number
 
 
-class StudioCallback(TrainingCallback):
-    """Emit structured metrics plus compact app-terminal progress lines."""
+class NonFiniteMetricError(RuntimeError):
+    """Raised when a reported training metric cannot be used safely."""
 
-    def __init__(self, stream=STUDIO_OUT, guard: ResourceGuard | None = None):
+
+class StudioCallback(TrainingCallback):
+    """Emit metrics and optionally abort when a reported value is non-finite."""
+
+    def __init__(
+        self,
+        stream=STUDIO_OUT,
+        guard: ResourceGuard | None = None,
+        stop_on_bad_metric: bool = False,
+    ):
         self.stream = stream
         self.guard = guard
+        self.stop_on_bad_metric = stop_on_bad_metric
+
+    @staticmethod
+    def _non_finite_value(value: Any, path: str) -> str | None:
+        if hasattr(value, "tolist"):
+            try:
+                value = value.tolist()
+            except Exception:
+                return None
+        if isinstance(value, (float, np.floating)) and not math.isfinite(float(value)):
+            return path
+        if isinstance(value, (list, tuple)):
+            for index, item in enumerate(value):
+                found = StudioCallback._non_finite_value(item, f"{path}[{index}]")
+                if found:
+                    return found
+        return None
 
     def _emit(self, event: str, payload: dict[str, Any]) -> None:
+        if self.stop_on_bad_metric:
+            for key, value in payload.items():
+                found = self._non_finite_value(value, key)
+                if found:
+                    step = payload.get("iteration", "unknown")
+                    raise NonFiniteMetricError(
+                        f"Stopping because {event} metric '{found}' is NaN or infinite "
+                        f"at iteration {step}. The run may be unstable; review the "
+                        "learning rate, batch size, sequence length, and data."
+                    )
         if self.guard is not None:
             self.guard.check(f"reporting {event} metrics")
         serializable = {
@@ -1196,7 +1232,9 @@ def run(args: SimpleNamespace) -> None:
     mx.random.seed(args.seed)
 
     guard = ResourceGuard()
-    studio_callback = StudioCallback(guard=guard)
+    studio_callback = StudioCallback(
+        guard=guard, stop_on_bad_metric=bool(getattr(args, "stop_on_bad_metric", False))
+    )
     callback: TrainingCallback = studio_callback
     if getattr(args, "wandb", None):
         callback = WandBCallback(
@@ -1214,6 +1252,8 @@ def run(args: SimpleNamespace) -> None:
     )
     if guard_line := guard.describe():
         studio_log(guard_line)
+    if studio_callback.stop_on_bad_metric:
+        studio_log("Non-finite metric guard armed.")
     if args.model_family == "vision_language":
         if not args.vlm_model:
             raise ValueError("VLM mode needs an original VLM repo or local folder.")

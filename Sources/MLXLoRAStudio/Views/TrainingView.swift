@@ -381,6 +381,8 @@ private struct CoreTrainingSection: View {
                 ToggleRow("Dequantize merged model", isOn: $config.fuseDequantize)
                 ToggleRow("Remove adapters after fuse", isOn: $config.fuseRemoveAdapters)
             }
+            ToggleRow("Stop on NaN or infinite metrics", isOn: $config.stopOnBadMetric)
+                .help("Stop the run when a reported loss or other numeric metric is NaN or infinite.")
             ToggleRow("Evaluate test split", isOn: $config.test)
             if config.test {
                 NumberField("Test Batches", value: $config.testBatches)
