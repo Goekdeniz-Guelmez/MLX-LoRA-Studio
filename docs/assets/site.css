@@ -279,6 +279,22 @@ body.close .app-nav {
   text-decoration: none;
 }
 
+.app-nav .nav-download {
+  display: inline-flex;
+  min-height: 34px;
+  align-items: center;
+  padding: 0 12px;
+  border: 1px solid var(--accent);
+  color: var(--ink);
+  background: var(--accent);
+}
+
+.app-nav .nav-download:hover {
+  border-color: var(--ink);
+  color: var(--surface);
+  background: var(--ink);
+}
+
 .markdown-section {
   max-width: var(--content);
   padding: 74px 64px 110px;

@@ -4,10 +4,11 @@
     <h1 class="hero__title">Make the model<br><span>fit the work.</span></h1>
     <p class="hero__lede">A native Mac studio for adapting open language models. Choose a training method, understand the tradeoffs, and watch each run on the machine in front of you.</p>
     <div class="hero__actions">
-      <a class="button button--primary" href="#/Train">Explore the workflow</a>
+      <a class="button button--primary" data-latest-dmg href="https://github.com/Goekdeniz-Guelmez/MLX-LoRA-Studio/releases/latest">Download for Mac</a>
+      <a class="button button--quiet" href="#/Train">Explore the workflow</a>
       <a class="button button--quiet" href="#/Algorithm-Guide">Find your method</a>
     </div>
-    <p class="hero__note">On-device training · Open methods · No rented GPU required for compatible runs</p>
+    <p class="hero__note">Latest macOS DMG · macOS 14+ · Apple Silicon</p>
   </div>
   <figure class="hero__visual">
     <div class="hero-image-frame">

@@ -1,5 +1,6 @@
 - [Overview](#/)
 - [Choose a method](#/Algorithm-Guide)
 - [Notebooks](#/Notebooks)
+- <a class="nav-download" data-latest-dmg href="https://github.com/Goekdeniz-Guelmez/MLX-LoRA-Studio/releases/latest">Download for Mac</a>
 - [Sponsor the work](https://github.com/sponsors/Goekdeniz-Guelmez)
 - [Source code](https://github.com/Goekdeniz-Guelmez/MLX-LoRA-Studio)
