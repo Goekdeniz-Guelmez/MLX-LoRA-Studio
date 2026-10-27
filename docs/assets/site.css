@@ -95,28 +95,7 @@ a:hover {
 }
 
 .sidebar > h1.app-name {
-  order: 0;
-  margin: 0 0 11px;
-  padding: 3px 10px 6px;
-  color: var(--ink);
-  font-size: 13px;
-  font-weight: 750;
-  letter-spacing: .11em;
-  text-transform: uppercase;
-}
-
-.app-name-link {
-  color: inherit;
-}
-
-.app-name-link::before {
-  display: inline-block;
-  width: 7px;
-  height: 7px;
-  margin: 0 9px 1px 0;
-  border-radius: 50%;
-  background: var(--accent);
-  content: "";
+  display: none;
 }
 
 .sidebar-nav {
