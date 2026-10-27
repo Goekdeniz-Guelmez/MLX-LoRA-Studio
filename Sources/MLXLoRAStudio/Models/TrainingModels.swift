@@ -8,6 +8,7 @@ enum SidebarSection: String, CaseIterable, Identifiable {
     case upload
     case guide
     case runs
+    case mcp
     case about
 
     var id: String { rawValue }
@@ -20,6 +21,7 @@ enum SidebarSection: String, CaseIterable, Identifiable {
         case .upload: "Upload to HF"
         case .guide: "Algorithm Guide"
         case .runs: "Runs"
+        case .mcp: "MCP Server"
         case .about: "About"
         }
     }
@@ -32,6 +34,7 @@ enum SidebarSection: String, CaseIterable, Identifiable {
         case .upload: "arrow.up.circle"
         case .guide: "book"
         case .runs: "chart.xyaxis.line"
+        case .mcp: "point.3.connected.trianglepath.dotted"
         case .about: "info.circle"
         }
     }
@@ -595,6 +598,8 @@ struct TrainingConfig: Equatable {
     var stepsPerEval = 200
     var saveEvery = 100
     var test = false
+    /// Abort as soon as a reported training metric contains NaN or infinity.
+    var stopOnBadMetric = true
     var testBatches = 100
     var maxSeqLength = 2048
     var gradCheckpoint = true
@@ -747,6 +752,7 @@ struct TrainingConfig: Equatable {
             "adapter_path": overrideAdapterPath ?? adapterPath,
             "save_every": saveEvery,
             "test": test,
+            "stop_on_bad_metric": stopOnBadMetric,
             "test_batches": testBatches,
             "max_seq_length": maxSeqLength,
             "grad_checkpoint": gradCheckpoint,
@@ -875,6 +881,24 @@ struct TrainingConfig: Equatable {
                 ]
             ]
         }
+    }
+}
+
+/// A point-in-time copy of a training configuration waiting for the runner.
+struct QueuedTrainingRun: Identifiable, Equatable {
+    let id: UUID
+    let config: TrainingConfig
+    let queuedAt: Date
+
+    init(config: TrainingConfig, queuedAt: Date = .now) {
+        self.id = UUID()
+        self.config = config
+        self.queuedAt = queuedAt
+    }
+
+    var title: String {
+        let modelName = config.model.split(separator: "/").last.map(String.init) ?? config.model
+        return "\(modelName) · \(config.trainMode.title) · \(config.trainType.title)"
     }
 }
 
@@ -1405,6 +1429,7 @@ extension TrainingConfig {
 
         // Booleans
         config.test = boolValue(spec["test"]) ?? config.test
+        config.stopOnBadMetric = boolValue(spec["stop_on_bad_metric"]) ?? config.stopOnBadMetric
         config.gradCheckpoint = boolValue(spec["grad_checkpoint"]) ?? config.gradCheckpoint
         config.efficientLongContext = boolValue(spec["efficient_long_context"])
             ?? config.efficientLongContext

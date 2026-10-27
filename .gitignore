@@ -11,3 +11,4 @@ __pycache__/
 *.pyo
 .conda/
 .swiftpm/
+apple/signing.local.env

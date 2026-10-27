@@ -71,7 +71,7 @@ Pair it with LoRA or DoRA in the same Fine-tune section. Quantisation is applied
 
 ## References
 
-- Dettmers et al., 2023, *QLoRA: Efficient Finetuning of Quantized LLMs*; the load-time affine scheme mirrors `mlx.nn.quantize`.
+- [Dettmers et al. (2023), *QLoRA: Efficient Finetuning of Quantized LLMs*](https://arxiv.org/abs/2305.14314). Studio's load-time quantization is implemented with `mlx.nn.quantize`.
 - Microscaling (MXFP4) format: NVIDIA / OCP Microscaling Formats specification.
 
 ## See also

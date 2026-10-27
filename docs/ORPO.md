@@ -62,7 +62,7 @@ Shared form: Model & Data; Fine-tune (LoRA/DoRA/Full + Quantization); Training S
 
 ## References
 
-- Hong et al., 2024, *ORPO: Monolithic Preference Optimization without Reference Model*.
+- [Hong, Lee, and Thorne (2024), *ORPO: Monolithic Preference Optimization without Reference Model*](https://arxiv.org/abs/2403.07691).
 - Implementation: `vendor/mlx-lm-lora/mlx_lm_lora/trainer/orpo_trainer.py`.
 
 ## See also

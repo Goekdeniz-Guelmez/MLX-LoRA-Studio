@@ -14,6 +14,7 @@ import os
 import re
 import resource
 import sys
+from collections import OrderedDict
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
@@ -134,6 +135,8 @@ def needs_reference_model(args) -> bool:
     if args.train_mode in REFERENCE_MODES:
         return True
     return args.train_mode == "dsla" and getattr(args, "dsla_loss", "dpo") == "dpo"
+
+DEFAULT_DATASET_CACHE_ITEMS = 512
 STUDIO_OUT = sys.stdout
 OPTIMIZER_CLASSES = {
     "sgd": optim.SGD,
@@ -311,14 +314,50 @@ def _positive_float(value: Any, name: str) -> float:
     return number
 
 
-class StudioCallback(TrainingCallback):
-    """Emit structured metrics plus compact app-terminal progress lines."""
+class NonFiniteMetricError(RuntimeError):
+    """Raised when a reported training metric cannot be used safely."""
 
-    def __init__(self, stream=STUDIO_OUT, guard: ResourceGuard | None = None):
+
+class StudioCallback(TrainingCallback):
+    """Emit metrics and optionally abort when a reported value is non-finite."""
+
+    def __init__(
+        self,
+        stream=STUDIO_OUT,
+        guard: ResourceGuard | None = None,
+        stop_on_bad_metric: bool = False,
+    ):
         self.stream = stream
         self.guard = guard
+        self.stop_on_bad_metric = stop_on_bad_metric
+
+    @staticmethod
+    def _non_finite_value(value: Any, path: str) -> str | None:
+        if hasattr(value, "tolist"):
+            try:
+                value = value.tolist()
+            except Exception:
+                return None
+        if isinstance(value, (float, np.floating)) and not math.isfinite(float(value)):
+            return path
+        if isinstance(value, (list, tuple)):
+            for index, item in enumerate(value):
+                found = StudioCallback._non_finite_value(item, f"{path}[{index}]")
+                if found:
+                    return found
+        return None
 
     def _emit(self, event: str, payload: dict[str, Any]) -> None:
+        if self.stop_on_bad_metric:
+            for key, value in payload.items():
+                found = self._non_finite_value(value, key)
+                if found:
+                    step = payload.get("iteration", "unknown")
+                    raise NonFiniteMetricError(
+                        f"Stopping because {event} metric '{found}' is NaN or infinite "
+                        f"at iteration {step}. The run may be unstable; review the "
+                        "learning rate, batch size, sequence length, and data."
+                    )
         if self.guard is not None:
             self.guard.check(f"reporting {event} metrics")
         serializable = {
@@ -592,6 +631,59 @@ class _SystemPromptFallbackDataset:
     def __iter__(self):
         for index in range(len(self)):
             yield self[index]
+
+
+class BoundedCacheDataset(CacheDataset):
+    """Cache recently tokenized examples without retaining a full dataset."""
+
+    def __init__(self, data: Any, max_items: int) -> None:
+        # The upstream CacheDataset allocates one slot per example and keeps
+        # every processed item for the lifetime of the run. Training over a
+        # large dataset can therefore compete with model weights for unified
+        # memory. An LRU retains the fast path for small/recent datasets while
+        # bounding the number of tokenized examples held by Studio.
+        self._data = data
+        self._max_items = max(0, int(max_items))
+        self._proc_data: OrderedDict[int, Any] = OrderedDict()
+
+    def itemlen(self, index: int) -> int:
+        return len(self._data[index])
+
+    def __getitem__(self, index: int) -> Any:
+        if not self._max_items:
+            return self._process(index)
+
+        try:
+            value = self._proc_data.pop(index)
+        except KeyError:
+            value = self._process(index)
+        self._proc_data[index] = value
+        while len(self._proc_data) > self._max_items:
+            self._proc_data.popitem(last=False)
+        return value
+
+    def __len__(self) -> int:
+        return len(self._data)
+
+    def _process(self, index: int) -> Any:
+        row = self._data[index]
+        processor = getattr(self._data, "process", None)
+        return processor(row) if callable(processor) else row
+
+
+def _dataset_cache_item_limit() -> int:
+    """Return the per-split LRU limit; zero disables processed-row caching."""
+    value = os.environ.get("MLX_LORA_STUDIO_DATASET_CACHE_ITEMS")
+    if value is None:
+        return DEFAULT_DATASET_CACHE_ITEMS
+    try:
+        return max(0, int(value))
+    except (TypeError, ValueError):
+        studio_log(
+            "Invalid MLX_LORA_STUDIO_DATASET_CACHE_ITEMS value; "
+            f"using the default of {DEFAULT_DATASET_CACHE_ITEMS}."
+        )
+        return DEFAULT_DATASET_CACHE_ITEMS
 
 
 def _load_dataset_with_system_fallback(args, tokenizer):
@@ -1148,12 +1240,52 @@ PIPELINES = {
 }
 
 
+def _evaluate_test_split(
+    args,
+    model,
+    tokenizer,
+    reference_model,
+    judge_model,
+    judge_tokenizer,
+    test_set,
+) -> dict[str, float]:
+    """Evaluate the test split and return the parsed metrics.
+
+    Evaluation problems are reported and swallowed on purpose. A run that
+    trained fine must not throw away the adapter it just produced because
+    the optional test pass blew up -- the export step comes after this one.
+    """
+    test_output = TeeCapture()
+    try:
+        with contextlib.redirect_stdout(
+            test_output
+        ), contextlib.redirect_stderr(test_output):
+            evaluate_model(
+                args=args,
+                model=model,
+                tokenizer=tokenizer,
+                reference_model=reference_model,
+                judge_model=judge_model,
+                judge_tokenizer=judge_tokenizer,
+                test_set=test_set,
+            )
+    except Exception as exc:
+        studio_log(f"Test split evaluation failed: {type(exc).__name__}: {exc}")
+        studio_log(
+            "Continuing without test metrics; the adapter will still be saved."
+        )
+        return {}
+    return _test_metrics_from_output(test_output.buffer.getvalue(), args.iters)
+
+
 def run(args: SimpleNamespace) -> None:
     np.random.seed(args.seed)
     mx.random.seed(args.seed)
 
     guard = ResourceGuard()
-    studio_callback = StudioCallback(guard=guard)
+    studio_callback = StudioCallback(
+        guard=guard, stop_on_bad_metric=bool(getattr(args, "stop_on_bad_metric", False))
+    )
     callback: TrainingCallback = studio_callback
     if getattr(args, "wandb", None):
         callback = WandBCallback(
@@ -1171,6 +1303,8 @@ def run(args: SimpleNamespace) -> None:
     )
     if guard_line := guard.describe():
         studio_log(guard_line)
+    if studio_callback.stop_on_bad_metric:
+        studio_log("Non-finite metric guard armed.")
     if args.model_family == "vision_language":
         if not args.vlm_model:
             raise ValueError("VLM mode needs an original VLM repo or local folder.")
@@ -1204,11 +1338,21 @@ def run(args: SimpleNamespace) -> None:
         train_raw, valid_raw, test_raw = _load_dataset_with_system_fallback(
             args, tokenizer
         )
-        train_set = CacheDataset(train_raw)
-        valid_set = CacheDataset(valid_raw)
-        test_set = CacheDataset(test_raw)
+        cache_items = _dataset_cache_item_limit()
+        train_set = BoundedCacheDataset(train_raw, cache_items)
+        valid_set = BoundedCacheDataset(valid_raw, cache_items)
+        # Test evaluation walks the split once, so retaining tokenized rows
+        # cannot improve throughput and only increases the training peak.
+        test_set = BoundedCacheDataset(test_raw, 0)
         guard.release_caches()
         args.iters = _iters(args, train_raw)
+        if cache_items and (
+            len(train_raw) > cache_items or len(valid_raw) > cache_items
+        ):
+            studio_log(
+                "Tokenized dataset cache capped at "
+                f"{cache_items} examples per training/validation split."
+            )
         _resolve_lr_schedule(args)
 
         if args.resume_adapter_file:
@@ -1243,26 +1387,22 @@ def run(args: SimpleNamespace) -> None:
                 studio_log("Skipping test split evaluation: no test rows were found.")
             else:
                 studio_log("Evaluating test split")
-                test_output = TeeCapture()
-                with contextlib.redirect_stdout(
-                    test_output
-                ), contextlib.redirect_stderr(test_output):
-                    evaluate_model(
-                        args=args,
-                        model=model,
-                        tokenizer=tokenizer,
-                        reference_model=reference_model,
-                        judge_model=judge_model,
-                        judge_tokenizer=judge_tokenizer,
-                        test_set=test_set,
-                    )
-                test_metrics = _test_metrics_from_output(
-                    test_output.buffer.getvalue(), args.iters
+                test_metrics = _evaluate_test_split(
+                    args=args,
+                    model=model,
+                    tokenizer=tokenizer,
+                    reference_model=reference_model,
+                    judge_model=judge_model,
+                    judge_tokenizer=judge_tokenizer,
+                    test_set=test_set,
                 )
                 if len(test_metrics) > 1:
                     studio_callback.on_test_loss_report(test_metrics)
 
-    mx.clear_cache()
+    # Training and optional test evaluation are complete. Release tokenized
+    # rows and optimizer state before a fused export allocates merged weights.
+    del train_set, valid_set, test_set, opt
+    guard.release_caches()
     del reference_model, judge_model, judge_tokenizer
 
     if args.fuse:

@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#f3efe4">
+    <meta name="description" content="A native macOS studio for fine-tuning open language models on Apple Silicon. Learn the methods, see the workflow, and train locally.">
+    <title>MLX LoRA Studio · Fine-tune on your Mac</title>
+    <link rel="icon" href="https://raw.githubusercontent.com/Goekdeniz-Guelmez/MLX-LoRA-Studio/main/Sources/Media/logo.png">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/docsify@4/lib/themes/vue.css">
+    <link rel="stylesheet" href="assets/site.css">
+  </head>
+  <body>
+    <a class="skip-link" href="#app">Skip to content</a>
+    <main id="app">Opening the studio guide…</main>
+    <script src="assets/site.js"></script>
+    <script>
+      window.$docsify = {
+        name: 'MLX LoRA Studio',
+        homepage: 'index.md',
+        loadSidebar: '_Sidebar.md',
+        loadNavbar: '_navbar.md',
+        auto2top: true,
+        subMaxLevel: 0,
+        maxLevel: 3,
+        relativePath: true,
+        search: {
+          depth: 3,
+          noData: 'No matching guide',
+          placeholder: 'Find a guide'
+        },
+        plugins: [
+          function (hook) {
+            hook.doneEach(function () {
+              if (window.MLXStudioSite) window.MLXStudioSite.enhance();
+            });
+          }
+        ]
+      };
+    </script>
+    <script src="https://cdn.jsdelivr.net/npm/docsify@4/lib/docsify.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/docsify@4/lib/plugins/search.min.js"></script>
+  </body>
+</html>

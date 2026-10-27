@@ -34,6 +34,7 @@ struct TrainingView: View {
                             subtitle: "\(store.training.trainMode.title) using \(store.training.trainType.title)",
                             symbol: "cpu"
                         )
+                        TrainingQueueSection(store: store)
 
                         ModeStrip(config: $store.training)
                         ModelDataSection(config: $store.training)
@@ -83,6 +84,55 @@ struct TrainingView: View {
     private func effectiveCollapsed(shouldAutoCollapse: Bool) -> Bool {
         if let manual = manualConsoleCollapsed { return manual }
         return shouldAutoCollapse
+    }
+}
+
+private struct TrainingQueueSection: View {
+    let store: AppStore
+
+    var body: some View {
+        if store.trainingRunner.isRunning || !store.queuedTrainingRuns.isEmpty {
+            VStack(alignment: .leading, spacing: 12) {
+                HStack {
+                    SectionTitle("Run Queue")
+                    Spacer()
+                    if !store.queuedTrainingRuns.isEmpty {
+                        Button("Clear") { store.clearQueuedTraining() }
+                            .buttonStyle(.plain)
+                    }
+                }
+                Text("Queue a snapshot of the current settings. The next run starts when the active run exits.")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                Button {
+                    store.enqueueCurrentTraining()
+                } label: {
+                    Label("Queue Current Configuration", systemImage: "text.badge.plus")
+                }
+                .disabled(!store.trainingRunner.isRunning)
+
+                ForEach(store.queuedTrainingRuns) { queued in
+                    HStack(spacing: 10) {
+                        Image(systemName: "arrow.turn.down.right")
+                            .foregroundStyle(.secondary)
+                        Text(queued.title)
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                        Spacer(minLength: 8)
+                        Button {
+                            store.removeQueuedTraining(queued.id)
+                        } label: {
+                            Image(systemName: "xmark.circle.fill")
+                                .foregroundStyle(.secondary)
+                        }
+                        .buttonStyle(.plain)
+                        .help("Remove queued run")
+                    }
+                }
+            }
+            .formBlock()
+        }
     }
 }
 
@@ -381,6 +431,8 @@ private struct CoreTrainingSection: View {
                 ToggleRow("Dequantize merged model", isOn: $config.fuseDequantize)
                 ToggleRow("Remove adapters after fuse", isOn: $config.fuseRemoveAdapters)
             }
+            ToggleRow("Stop on NaN or infinite metrics", isOn: $config.stopOnBadMetric)
+                .help("Stop the run when a reported loss or other numeric metric is NaN or infinite.")
             ToggleRow("Evaluate test split", isOn: $config.test)
             if config.test {
                 NumberField("Test Batches", value: $config.testBatches)

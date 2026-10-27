@@ -31,4 +31,6 @@ The rendered generation prompt must be an exact token prefix of both responses. 
 - QAT works with DSLA. Bits, group size, and start step apply; mode and interval have no effect.
 - Live metrics include `latent_sim_margin` and `latent_dir_margin`. Both should rise during training.
 
-- Implementation: `vendor/mlx-lm-lora/mlx_lm_lora/trainer/dsla_trainer.py`.
+## References
+
+This is an implementation-specific method; no standalone paper is cited for this trainer. See the [DSLA trainer source](https://github.com/Goekdeniz-Guelmez/mlx-lm-lora/blob/main/mlx_lm_lora/trainer/dsla_trainer.py).

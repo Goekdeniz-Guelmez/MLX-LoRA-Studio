@@ -87,9 +87,9 @@ Per-optimizer kwargs (`betas`, `eps`, `weight_decay`, `momentum`, `nesterov`) ar
 
 ## References
 
-- Kingma & Ba, 2014, *Adam: A Method for Stochastic Optimization*.
-- Loshchilov & Hutter, 2019, *Decoupled Weight Decay Regularization* (AdamW).
-- Jordan et al., 2024, *Muon* (Newton-Schulz orthogonalised momentum).
+- [Kingma and Ba (2014), *Adam: A Method for Stochastic Optimization*](https://arxiv.org/abs/1412.6980).
+- [Loshchilov and Hutter (2017), *Decoupled Weight Decay Regularization*](https://arxiv.org/abs/1711.05101) (AdamW).
+- [Jordan et al. (2024), *Muon: An optimizer for hidden layers in neural networks*](https://kellerjordan.github.io/posts/muon/).
 
 ## See also
 

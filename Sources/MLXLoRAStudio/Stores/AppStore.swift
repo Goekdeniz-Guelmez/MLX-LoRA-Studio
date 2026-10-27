@@ -18,7 +18,9 @@ final class AppStore {
     var syntheticRunner = PythonJobRunner()
     var hfUploadRunner = PythonJobRunner()
     var packageRunner = PythonJobRunner()
+    var mcpServer = MCPServerController()
     var runs: [RunRecord] = []
+    var queuedTrainingRuns: [QueuedTrainingRun] = []
     /// Runs that the runner has written to the output root in previous
     /// sessions (or earlier in this one). Discovered on launch and
     /// refreshed on demand from the Runs page. See `RunArchive` for
@@ -180,6 +182,9 @@ final class AppStore {
         if let saved = defaults.string(forKey: DefaultsKey.selectedPythonPath),
            !saved.isEmpty {
             pythonExecutable = saved
+        }
+        if defaults.string(forKey: "mcpServerPythonExecutable") == nil {
+            mcpServer.pythonExecutable = pythonExecutable
         }
         if let savedCustom = defaults.string(forKey: DefaultsKey.customPythonPath) {
             customPythonPath = savedCustom
@@ -507,16 +512,17 @@ final class AppStore {
             await startSynthetic()
         case .upload:
             await startHFUpload()
-        case .metrics, .guide, .runs, .about:
+        case .metrics, .guide, .runs, .mcp, .about:
             break
         }
     }
 
-    func startTraining() async {
+    func startTraining(config runConfig: TrainingConfig? = nil) async {
+        let config = runConfig ?? training
         let runID = UUID()
         do {
             let command = try await trainingRunner.startTraining(
-                config: training,
+                config: config,
                 pythonExecutable: pythonExecutable,
                 packagePath: packagePath,
                 workingDirectory: workingDirectory,
@@ -525,18 +531,44 @@ final class AppStore {
                 huggingFaceToken: huggingFaceToken(),
                 onCompletion: jobCompletionHandler(
                     runID: runID,
-                    successTitle: "\(training.trainMode.title) training finished",
-                    failureTitle: "\(training.trainMode.title) training stopped",
+                    successTitle: "\(config.trainMode.title) training finished",
+                    failureTitle: "\(config.trainMode.title) training stopped",
                     successBody: "The training run has completed.",
-                    failureBody: "The training run exited before completing successfully."
+                    failureBody: "The training run exited before completing successfully.",
+                    continueTrainingQueue: true
                 )
             )
             runs.insert(
-                RunRecord(id: runID, title: "\(training.trainMode.title) Training", command: command, startedAt: .now, status: "Running"),
+                RunRecord(id: runID, title: "\(config.trainMode.title) Training", command: command, startedAt: .now, status: "Running"),
                 at: 0
             )
         } catch {
             trainingRunner.appendSystemLine("Could not start training: \(error.localizedDescription)")
+        }
+    }
+
+    func enqueueCurrentTraining() {
+        guard trainingRunner.isRunning else { return }
+        let queued = QueuedTrainingRun(config: training)
+        queuedTrainingRuns.append(queued)
+        trainingRunner.appendSystemLine("Queued training run: \(queued.title)")
+    }
+
+    func removeQueuedTraining(_ id: UUID) {
+        queuedTrainingRuns.removeAll { $0.id == id }
+    }
+
+    func clearQueuedTraining() {
+        queuedTrainingRuns.removeAll()
+    }
+
+    private func startNextQueuedTraining() async {
+        guard !trainingRunner.isRunning else { return }
+        while !queuedTrainingRuns.isEmpty && !trainingRunner.isRunning {
+            let next = queuedTrainingRuns.removeFirst()
+            training = next.config
+            trainingRunner.appendSystemLine("Starting queued training run: \(next.title)")
+            await startTraining(config: next.config)
         }
     }
 
@@ -714,7 +746,7 @@ final class AppStore {
             hfUploadRunner
         case .metrics:
             trainingRunner
-        case .guide, .runs, .about:
+        case .guide, .runs, .mcp, .about:
             nil
         }
     }
@@ -731,7 +763,7 @@ final class AppStore {
         switch selection {
         case .train, .synthetic, .upload:
             true
-        case .metrics, .guide, .runs, .about:
+        case .metrics, .guide, .runs, .mcp, .about:
             false
         }
     }
@@ -766,11 +798,15 @@ final class AppStore {
         successTitle: String? = nil,
         failureTitle: String? = nil,
         successBody: String? = nil,
-        failureBody: String? = nil
+        failureBody: String? = nil,
+        continueTrainingQueue: Bool = false
     ) -> @MainActor (Int32) -> Void {
         { [weak self] status in
             guard let self else { return }
             markRun(runID, status: status == 0 ? "Finished" : "Failed")
+            if continueTrainingQueue {
+                Task { await self.startNextQueuedTraining() }
+            }
             guard completionNotificationsEnabled,
                   let successTitle,
                   let failureTitle,
