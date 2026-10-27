@@ -13,6 +13,7 @@ import os
 import re
 import resource
 import sys
+from collections import OrderedDict
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
@@ -83,6 +84,8 @@ def needs_reference_model(args) -> bool:
     if args.train_mode in REFERENCE_MODES:
         return True
     return args.train_mode == "dsla" and getattr(args, "dsla_loss", "dpo") == "dpo"
+
+DEFAULT_DATASET_CACHE_ITEMS = 512
 STUDIO_OUT = sys.stdout
 OPTIMIZER_CLASSES = {
     "sgd": optim.SGD,
@@ -541,6 +544,59 @@ class _SystemPromptFallbackDataset:
     def __iter__(self):
         for index in range(len(self)):
             yield self[index]
+
+
+class BoundedCacheDataset(CacheDataset):
+    """Cache recently tokenized examples without retaining a full dataset."""
+
+    def __init__(self, data: Any, max_items: int) -> None:
+        # The upstream CacheDataset allocates one slot per example and keeps
+        # every processed item for the lifetime of the run. Training over a
+        # large dataset can therefore compete with model weights for unified
+        # memory. An LRU retains the fast path for small/recent datasets while
+        # bounding the number of tokenized examples held by Studio.
+        self._data = data
+        self._max_items = max(0, int(max_items))
+        self._proc_data: OrderedDict[int, Any] = OrderedDict()
+
+    def itemlen(self, index: int) -> int:
+        return len(self._data[index])
+
+    def __getitem__(self, index: int) -> Any:
+        if not self._max_items:
+            return self._process(index)
+
+        try:
+            value = self._proc_data.pop(index)
+        except KeyError:
+            value = self._process(index)
+        self._proc_data[index] = value
+        while len(self._proc_data) > self._max_items:
+            self._proc_data.popitem(last=False)
+        return value
+
+    def __len__(self) -> int:
+        return len(self._data)
+
+    def _process(self, index: int) -> Any:
+        row = self._data[index]
+        processor = getattr(self._data, "process", None)
+        return processor(row) if callable(processor) else row
+
+
+def _dataset_cache_item_limit() -> int:
+    """Return the per-split LRU limit; zero disables processed-row caching."""
+    value = os.environ.get("MLX_LORA_STUDIO_DATASET_CACHE_ITEMS")
+    if value is None:
+        return DEFAULT_DATASET_CACHE_ITEMS
+    try:
+        return max(0, int(value))
+    except (TypeError, ValueError):
+        studio_log(
+            "Invalid MLX_LORA_STUDIO_DATASET_CACHE_ITEMS value; "
+            f"using the default of {DEFAULT_DATASET_CACHE_ITEMS}."
+        )
+        return DEFAULT_DATASET_CACHE_ITEMS
 
 
 def _load_dataset_with_system_fallback(args, tokenizer):
@@ -1153,11 +1209,21 @@ def run(args: SimpleNamespace) -> None:
         train_raw, valid_raw, test_raw = _load_dataset_with_system_fallback(
             args, tokenizer
         )
-        train_set = CacheDataset(train_raw)
-        valid_set = CacheDataset(valid_raw)
-        test_set = CacheDataset(test_raw)
+        cache_items = _dataset_cache_item_limit()
+        train_set = BoundedCacheDataset(train_raw, cache_items)
+        valid_set = BoundedCacheDataset(valid_raw, cache_items)
+        # Test evaluation walks the split once, so retaining tokenized rows
+        # cannot improve throughput and only increases the training peak.
+        test_set = BoundedCacheDataset(test_raw, 0)
         guard.release_caches()
         args.iters = _iters(args, train_raw)
+        if cache_items and (
+            len(train_raw) > cache_items or len(valid_raw) > cache_items
+        ):
+            studio_log(
+                "Tokenized dataset cache capped at "
+                f"{cache_items} examples per training/validation split."
+            )
         _resolve_lr_schedule(args)
 
         if args.resume_adapter_file:
@@ -1211,7 +1277,10 @@ def run(args: SimpleNamespace) -> None:
                 if len(test_metrics) > 1:
                     studio_callback.on_test_loss_report(test_metrics)
 
-    mx.clear_cache()
+    # Training and optional test evaluation are complete. Release tokenized
+    # rows and optimizer state before a fused export allocates merged weights.
+    del train_set, valid_set, test_set, opt
+    guard.release_caches()
     del reference_model, judge_model, judge_tokenizer
 
     if args.fuse:

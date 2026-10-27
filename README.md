@@ -471,6 +471,12 @@ cost, given the base model size, the sequence length, the adapter shape, and the
 quantization mode. **ResourceGuard** refuses to start a run whose estimated cost
 would push the system into swap.
 
+The Python runner keeps a bounded cache of tokenized training and validation
+examples (512 examples per split by default) and does not cache the one-pass test
+split. Set `MLX_LORA_STUDIO_DATASET_CACHE_ITEMS=0` before launching the app to
+disable processed-example caching, or set another non-negative value to change
+the per-split limit.
+
 ---
 
 ## Building from source
@@ -493,6 +499,16 @@ cd mlx-lm-lora-app
 # Tail the unified log while the app runs:
 ./script/build_and_run.sh --logs
 ```
+
+To sign a local package with Developer ID and notarize the DMG, copy
+`apple/signing.local.env.example` to `apple/signing.local.env`, set your Developer
+ID identity and team ID, create the suggested `notarytool` keychain profile, and
+set `JOSIE_NOTARY_PROFILE` to that profile name.
+The build script loads that ignored local file automatically. When a notary
+profile is configured, `--package`, `--release-assets`, and `--release-package`
+submit and staple the resulting DMG. You can instead provide `JOSIE_APPLE_ID`,
+`JOSIE_TEAM_ID`, and `NOTARY_PASSWORD`; the keychain profile is preferred so the
+app-specific password does not need to be stored in a file.
 
 The build script:
 
