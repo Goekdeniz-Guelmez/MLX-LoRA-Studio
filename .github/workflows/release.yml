@@ -99,16 +99,16 @@ jobs:
         env:
           DEVELOPER_ID_CERTIFICATE_BASE64: ${{ secrets.APPLE_DEVELOPER_ID_CERTIFICATE_BASE64 }}
           DEVELOPER_ID_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_DEVELOPER_ID_CERTIFICATE_PASSWORD }}
-          CODE_SIGN_IDENTITY: ${{ secrets.APPLE_CODESIGN_IDENTITY }}
-          NOTARY_APPLE_ID: ${{ secrets.APPLE_NOTARY_APPLE_ID }}
-          NOTARY_TEAM_ID: ${{ secrets.APPLE_NOTARY_TEAM_ID }}
+          JOSIE_CODESIGN_IDENTITY: ${{ secrets.APPLE_CODESIGN_IDENTITY }}
+          JOSIE_APPLE_ID: ${{ secrets.APPLE_NOTARY_APPLE_ID }}
+          JOSIE_TEAM_ID: ${{ secrets.APPLE_NOTARY_TEAM_ID }}
           NOTARY_PASSWORD: ${{ secrets.APPLE_NOTARY_PASSWORD }}
         run: |
           if [[ -n "$DEVELOPER_ID_CERTIFICATE_BASE64" \
              && -n "$DEVELOPER_ID_CERTIFICATE_PASSWORD" \
-             && -n "$CODE_SIGN_IDENTITY" \
-             && -n "$NOTARY_APPLE_ID" \
-             && -n "$NOTARY_TEAM_ID" \
+             && -n "$JOSIE_CODESIGN_IDENTITY" \
+             && -n "$JOSIE_APPLE_ID" \
+             && -n "$JOSIE_TEAM_ID" \
              && -n "$NOTARY_PASSWORD" ]]; then
             echo "enabled=true" >> "$GITHUB_OUTPUT"
             echo "Developer ID signing and notarization are enabled."
@@ -138,9 +138,25 @@ jobs:
           security list-keychain -d user -s "$KEYCHAIN_PATH" login.keychain-db
           security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KC_PASSWORD" "$KEYCHAIN_PATH"
 
+      - name: Store notarization credentials in runner keychain
+        if: steps.signing.outputs.enabled == 'true'
+        env:
+          JOSIE_NOTARY_PROFILE: mlx_lora_studio
+          JOSIE_APPLE_ID: ${{ secrets.APPLE_NOTARY_APPLE_ID }}
+          JOSIE_TEAM_ID: ${{ secrets.APPLE_NOTARY_TEAM_ID }}
+          NOTARY_PASSWORD: ${{ secrets.APPLE_NOTARY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          xcrun notarytool store-credentials "$JOSIE_NOTARY_PROFILE" \
+            --apple-id "$JOSIE_APPLE_ID" \
+            --team-id "$JOSIE_TEAM_ID" \
+            --password "$NOTARY_PASSWORD"
+
       - name: Build the .app bundle
         env:
-          CODE_SIGN_IDENTITY: ${{ steps.signing.outputs.enabled == 'true' && secrets.APPLE_CODESIGN_IDENTITY || '-' }}
+          JOSIE_CODESIGN_IDENTITY: ${{ steps.signing.outputs.enabled == 'true' && secrets.APPLE_CODESIGN_IDENTITY || '-' }}
+          JOSIE_TEAM_ID: ${{ steps.signing.outputs.enabled == 'true' && secrets.APPLE_NOTARY_TEAM_ID || '' }}
+          JOSIE_NOTARY_PROFILE: ${{ steps.signing.outputs.enabled == 'true' && 'mlx_lora_studio' || '' }}
         run: |
           set -euxo pipefail
           ./script/build_and_run.sh --package
@@ -158,22 +174,13 @@ jobs:
           ls -la dist
           file "$DMG"
 
-      - name: Notarize and staple DMG
+      - name: Verify notarized DMG
         if: steps.signing.outputs.enabled == 'true'
-        env:
-          NOTARY_APPLE_ID: ${{ secrets.APPLE_NOTARY_APPLE_ID }}
-          NOTARY_TEAM_ID: ${{ secrets.APPLE_NOTARY_TEAM_ID }}
-          NOTARY_PASSWORD: ${{ secrets.APPLE_NOTARY_PASSWORD }}
         run: |
           set -euxo pipefail
           VERSION="${{ steps.version.outputs.VERSION }}"
           DMG="dist/MLX-LoRA-Studio-${VERSION}.dmg"
-          xcrun notarytool submit "$DMG" \
-            --apple-id "$NOTARY_APPLE_ID" \
-            --team-id "$NOTARY_TEAM_ID" \
-            --password "$NOTARY_PASSWORD" \
-            --wait
-          xcrun stapler staple "$DMG"
+          xcrun stapler validate "$DMG"
           spctl -a -vv -t open "$DMG"
 
       - name: Verify .app exists
