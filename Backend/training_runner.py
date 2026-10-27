@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import contextlib
 import importlib
+import importlib.util
 import io
 import json
 import math
@@ -17,6 +18,56 @@ from collections import OrderedDict
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
+
+RUNTIME_MODULES = ("mlx", "mlx_lm", "mlx_lm_lora")
+
+
+def _missing_runtime_modules() -> list[str]:
+    """Return the MLX runtime packages that are not importable.
+
+    Modules that are already in ``sys.modules`` count as present: the test
+    suite injects stubs for them, and a stubbed module has no ``__spec__``
+    for ``find_spec`` to return.
+    """
+    missing = []
+    for name in RUNTIME_MODULES:
+        if name in sys.modules:
+            continue
+        try:
+            found = importlib.util.find_spec(name) is not None
+        except (ImportError, ValueError):
+            found = False
+        if not found:
+            missing.append(name)
+    return missing
+
+
+def _preflight_python_environment() -> None:
+    """Fail fast with an actionable message when MLX is not installed.
+
+    Without this the app surfaces a bare ``ModuleNotFoundError: No module
+    named 'mlx'`` from the middle of the import block, which does not tell
+    the user that they picked an interpreter without the runtime packages.
+    """
+    missing = _missing_runtime_modules()
+    if not missing:
+        return
+
+    interpreter = sys.executable
+    subject = "is" if len(missing) == 1 else "are"
+    sys.stderr.write(
+        "MLX LoRA Studio cannot start: "
+        + ", ".join(missing)
+        + f" {subject} not installed in\n"
+        f"  {interpreter}\n\n"
+        "Install the runtime packages with:\n"
+        f"  {interpreter} -m pip install mlx mlx-lm-lora matplotlib\n\n"
+        "or choose a different environment in Settings > Python environments.\n"
+    )
+    raise SystemExit(2)
+
+
+_preflight_python_environment()
 
 import mlx.core as mx
 import mlx.optimizers as optim
