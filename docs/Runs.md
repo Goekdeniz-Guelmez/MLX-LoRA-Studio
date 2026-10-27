@@ -3,7 +3,7 @@
 The Runs view turns an experiment into a record you can revisit. Studio reads runs from its output folder and shows the configuration, training log, status, metrics, and saved adapter.
 
 <div class="doc-screenshot">
-  <img src="https://raw.githubusercontent.com/Goekdeniz-Guelmez/MLX-LoRA-Studio/main/Sources/Media/app_runs.png" alt="MLX LoRA Studio Runs view showing active and previous jobs with status and training charts" loading="lazy">
+  <img src="https://raw.githubusercontent.com/Goekdeniz-Guelmez/MLX-LoRA-Studio/main/Sources/Media/app_runs.png" alt="MLX LoRA Studio Runs view with completed SFT, DPO, and ORPO jobs and their loss charts" loading="lazy">
 </div>
 
 ## Keep a useful record

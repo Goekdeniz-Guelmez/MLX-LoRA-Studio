@@ -66,6 +66,28 @@
 
 <section class="home-section">
   <div class="home-section__intro">
+    <h2 class="home-section__title">Try one small model with different methods.</h2>
+    <p>The project’s full-screen examples use <a href="https://huggingface.co/HuggingFaceTB/SmolLM2-135M-Instruct">HuggingFaceTB/SmolLM2-135M-Instruct</a>, converted to MLX format before training. The same base model ran SFT, DPO, and ORPO in the app.</p>
+  </div>
+  <div class="workflow-grid">
+    <article class="workflow">
+      <h3>SFT · 500 chat examples</h3>
+      <p><a href="https://huggingface.co/datasets/d1272/MetaPrompt-Architect-500">MetaPrompt-Architect-500</a> has a small training split in chat format and an MIT license.</p>
+    </article>
+    <article class="workflow">
+      <h3>DPO and ORPO · preference pairs</h3>
+      <p><a href="https://huggingface.co/datasets/Taichi11/dpo_dataset_v4">Taichi11/dpo_dataset_v4</a> has 2,878 training rows, the fields <code>prompt</code>, <code>chosen</code>, and <code>rejected</code>, and an Apache-2.0 license. The short demos use a 100-row slice.</p>
+    </article>
+    <article class="workflow">
+      <h3>Short runs, visible results</h3>
+      <p>Each screenshot shows a real 10-step run. It demonstrates setup, metrics, and logs; it is not a model-quality benchmark.</p>
+    </article>
+  </div>
+  <p><a href="https://github.com/Goekdeniz-Guelmez/MLX-LoRA-Studio#small-real-training-runs">View the full-screen SFT, DPO, and ORPO runs →</a></p>
+</section>
+
+<section class="home-section">
+  <div class="home-section__intro">
     <h2 class="home-section__title">The best algorithm is the one your data can support.</h2>
     <p>Start with the signal you have. Use demonstrations when you know what a good answer looks like. Use preference pairs when you can compare answers. Use reinforcement learning when a reliable reward can score generated outputs.</p>
   </div>
