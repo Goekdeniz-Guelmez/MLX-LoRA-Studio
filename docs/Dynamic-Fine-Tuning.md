@@ -20,3 +20,8 @@ Run-spec example:
   "sft_loss_type": "dft"
 }
 ```
+
+## References
+
+- [Wu et al. (2025), *On the Generalization of SFT: A Reinforcement Learning Perspective with Reward Rectification*](https://arxiv.org/abs/2508.05629).
+- Implementation: `vendor/mlx-lm-lora/mlx_lm_lora/trainer/sft_trainer.py`.

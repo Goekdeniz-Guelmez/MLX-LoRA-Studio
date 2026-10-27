@@ -68,7 +68,8 @@ Shared form: Model & Data; Fine-tune (LoRA/DoRA/Full + Quantization); Training S
 
 ## References
 
-- REINFORCE (Williams, 1992) applied to LLM RLHF with an LLM judge and a per-token KL penalty.
+- [Williams (1992), *Simple statistical gradient-following algorithms for connectionist reinforcement learning*](https://doi.org/10.1007/BF00992696).
+- [Ouyang et al. (2022), *Training language models to follow instructions with human feedback*](https://arxiv.org/abs/2203.02155) for the RLHF language-model training pipeline.
 - Implementation: `vendor/mlx-lm-lora/mlx_lm_lora/trainer/rlhf_reinforce_trainer.py`.
 
 ## See also

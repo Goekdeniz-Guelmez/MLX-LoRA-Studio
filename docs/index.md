@@ -1,5 +1,6 @@
 <section class="hero">
   <div class="hero__copy">
+    <p class="hero__eyebrow">MLX LORA STUDIO <span>/</span> LOCAL FINE-TUNING</p>
     <h1 class="hero__title">Make the model<br><span>fit the work.</span></h1>
     <p class="hero__lede">A native Mac studio for adapting open language models. Choose a training method, understand the tradeoffs, and watch each run on the machine in front of you.</p>
     <div class="hero__actions">
@@ -144,5 +145,5 @@
 
 <footer class="page-footer">
   <span>MLX LoRA Studio · macOS 14+ · Apple Silicon</span>
-  <span><a href="https://github.com/Goekdeniz-Guelmez/MLX-LoRA-Studio">Open-source project</a> · <a href="MCP-Server">Agent and MCP workflow</a></span>
+  <span><a href="https://github.com/Goekdeniz-Guelmez/MLX-LoRA-Studio">Open-source project</a> · <a href="MCP-Server">Agent and MCP workflow</a> · <a href="#/Acknowledgements">Acknowledgements and citations</a></span>
 </footer>

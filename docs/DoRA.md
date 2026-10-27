@@ -46,7 +46,7 @@ On the **Train** tab → **Fine-tune** section: pick **DORA** in the segmented F
 
 ## References
 
-- Liu et al., 2024, *DoRA: Weight-Decomposed Low-Rank Adaptation*.
+- [Liu et al. (2024), *DoRA: Weight-Decomposed Low-Rank Adaptation*](https://arxiv.org/abs/2402.09353).
 - Implementation: `mlx_lm_lora.utils.from_pretrained` → DoRA wrapper.
 
 ## See also

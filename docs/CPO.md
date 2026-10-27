@@ -65,7 +65,8 @@ Shared form: Model & Data; Fine-tune (LoRA/DoRA/Full + Quantization); Training S
 
 ## References
 
-- CPO shares its mathematical lineage with DPO (Rafailov et al., 2023); the reference-free variant is the contrastive/contrastive-direct line.
+- Related research: [Xu et al. (2024), *Contrastive Preference Optimization: Pushing the Boundaries of LLM Performance in Machine Translation*](https://arxiv.org/abs/2401.08417). That paper studies CPO in machine translation; the Studio objective and its implementation are described on this page and in the trainer source.
+- DPO background: [Rafailov et al. (2023), *Direct Preference Optimization: Your Language Model is Secretly a Reward Model*](https://arxiv.org/abs/2305.18290).
 - Implementation: `vendor/mlx-lm-lora/mlx_lm_lora/trainer/cpo_trainer.py`.
 
 ## See also

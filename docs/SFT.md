@@ -132,7 +132,8 @@ On the **Train** tab, SFT uses only the shared form — there is no algorithm-sp
 
 ## References
 
-- SFT as next-token cross-entropy is the standard language-model pretraining/finetuning objective (Vaswani et al., 2017; Radford et al., 2018/2019).
+- Instruction-following SFT in an RLHF pipeline: [Ouyang et al. (2022), *Training language models to follow instructions with human feedback*](https://arxiv.org/abs/2203.02155).
+- The next-token cross-entropy objective is a general language-model training objective, not a method introduced by a single SFT paper.
 - Implementation: `vendor/mlx-lm-lora/mlx_lm_lora/trainer/sft_trainer.py` (`default_loss`).
 
 ## See also

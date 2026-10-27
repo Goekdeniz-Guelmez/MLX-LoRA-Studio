@@ -43,3 +43,4 @@
 - [Example notebook collection](https://github.com/Goekdeniz-Guelmez/mlx-lm-lora-example-notebooks)
 - [GitHub profile](https://github.com/Goekdeniz-Guelmez)
 - [Sponsor the project](https://github.com/sponsors/Goekdeniz-Guelmez)
+- [Acknowledgements and citations](Acknowledgements)
