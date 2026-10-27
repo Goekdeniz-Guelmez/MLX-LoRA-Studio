@@ -46,7 +46,7 @@ struct AlgorithmGuideView: View {
         VStack(alignment: .leading, spacing: 10) {
             Text("How to read this page")
                 .font(.headline)
-            Text("mlx-lm-lora 5.8.6 ships twelve training algorithms, grouped into three families: **supervised** (SFT), **preference** (DPO, DSLA, FTPO, CPO, ORPO), and **reinforcement / online** (GRPO, KLPO, Online DPO, XPO, RLHF-REINFORCE, PPO). Tapping a card in **Training loops** below opens its full wiki article.")
+            Text("mlx-lm-lora 5.10.2 ships twelve training algorithms, grouped into three families: **supervised** (SFT), **preference** (DPO, DSLA, FTPO, CPO, ORPO), and **reinforcement / online** (GRPO, KLPO, Online DPO, XPO, RLHF-REINFORCE, PPO). Tapping a card in **Training loops** below opens its full wiki article.")
                 .fixedSize(horizontal: false, vertical: true)
             Text("Under **Foundations** you will find the four pieces that are orthogonal to the choice of loss: the **adaptation method** that decides which tensors are trainable (LoRA / DoRA / full), the **optimizer** that turns gradients into updates (Adam, AdamW, Muon), the **load-time quantisation** of the base model (4 / 6 / 8 / MXFP4 bit), and **Quantization-Aware Training** that simulates a quantised forward pass so the trained adapter survives deployment quantisation.")
                 .fixedSize(horizontal: false, vertical: true)

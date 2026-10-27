@@ -46,9 +46,9 @@
 
 ---
 
-## mlx-lm-lora 5.8.6
+## mlx-lm-lora 5.10.2
 
-**The bundled backend is now `mlx-lm-lora` 5.8.6.** It adds two trainers and new memory controls:
+**The bundled backend is now `mlx-lm-lora` 5.10.2.** It adds epoch-based training budgets and a read-only `calculate_iters` MCP tool, fixes completed-run detection after server restarts, and handles incomplete optional PyTorch namespaces during Hugging Face dataset loading. It also includes the DSLA and KLPO trainers and memory controls:
 
 - **DSLA** (Directional and Similarity-aware Latent Alignment) on top of DPO, ORPO, or CPO.
 - **KLPO** (KL-Regularized Policy Optimization), a critic-free RL loop using the GRPO reward functions.
@@ -497,7 +497,7 @@ The build script:
 
 1. Compiles all Swift files in `Sources/MLXLoRAStudio/` with `swiftc` against
    `SwiftUI` and `AppKit`.
-2. Fetches the pinned `mlx-lm-lora` 5.8.6 checkout when it is absent, then
+2. Fetches the pinned `mlx-lm-lora` 5.10.2 checkout when it is absent, then
    bundles it with the app icon and Python helper (`Backend/`) into
    `Contents/Resources/`. The checkout and Python environment remain local and
    are not committed to source control.
