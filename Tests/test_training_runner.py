@@ -744,6 +744,53 @@ class TrainingRunnerTests(unittest.TestCase):
         self.assertEqual(metrics["test_chosen_reward"], 1.25)
         self.assertEqual(metrics["test_rejected_reward"], -0.75)
 
+    def test_hf_dataset_urls_are_normalized_to_repo_ids(self):
+        runner, _stubs = load_training_runner()
+
+        self.assertEqual(
+            runner._normalize_hf_dataset_reference(
+                "https://huggingface.co/datasets/HuggingFaceH4/no_robots"
+            ),
+            "HuggingFaceH4/no_robots",
+        )
+        self.assertEqual(
+            runner._normalize_hf_dataset_reference(
+                "https://huggingface.co/datasets/HuggingFaceH4/no_robots/"
+            ),
+            "HuggingFaceH4/no_robots",
+        )
+        self.assertEqual(
+            runner._normalize_hf_dataset_reference(
+                "http://huggingface.co/HuggingFaceH4/no_robots"
+            ),
+            "HuggingFaceH4/no_robots",
+        )
+        self.assertEqual(
+            runner._normalize_hf_dataset_reference(
+                "HuggingFaceH4/no_robots"
+            ),
+            "HuggingFaceH4/no_robots",
+        )
+        self.assertEqual(
+            runner._normalize_hf_dataset_reference("/tmp/local-data"),
+            "/tmp/local-data",
+        )
+
+    def test_normalize_spec_resolves_dataset_urls(self):
+        runner, _stubs = load_training_runner()
+
+        args = runner._normalize_spec(
+            {
+                "model": "text-model",
+                "adapter_path": "adapters",
+                "data": "https://huggingface.co/datasets/HuggingFaceH4/no_robots",
+                "hf_dataset": "https://huggingface.co/datasets/HuggingFaceH4/no_robots",
+            }
+        )
+
+        self.assertEqual(args.data, "HuggingFaceH4/no_robots")
+        self.assertEqual(args.hf_dataset, "HuggingFaceH4/no_robots")
+        
     def test_preflight_passes_when_the_runtime_is_available(self):
         runner, _stubs = load_training_runner()
 
