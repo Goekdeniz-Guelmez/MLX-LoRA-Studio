@@ -34,6 +34,7 @@
 - [Upload to HF](Upload-to-HF)
 - [Algorithm Guide](Algorithm-Guide)
 - [Runs](Runs)
+- [MCP Server](MCP-Server)
 - [Settings & Onboarding](Settings-and-Onboarding)
 
 ---
