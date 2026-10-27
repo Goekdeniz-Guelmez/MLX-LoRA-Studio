@@ -228,7 +228,7 @@ reward_functions_file: ~/my_rewards.py
 
 ## References
 
-- DeepSeek-AI, 2024, *DeepSeekMath: Pushing the Limits of Mathematical Reasoning in Open Language Models* (GRPO). DAPO for asymmetric clipping; GSPO for sequence-level importance sampling.
+- [Shao et al. (2024), *DeepSeekMath: Pushing the Limits of Mathematical Reasoning in Open Language Models*](https://arxiv.org/abs/2402.03300) introduced GRPO.
 - Implementation: `vendor/mlx-lm-lora/mlx_lm_lora/trainer/grpo_trainer.py`, `grpo_reward_functions.py`.
 
 ## See also

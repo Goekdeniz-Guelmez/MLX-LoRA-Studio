@@ -1,6 +1,6 @@
 # Dynamic fine-tuning
 
-`mlx-lm-lora` 3.0.0 added selectable SFT loss functions (still available in 5.8.6). Choose one in **Train → Training Settings → SFT loss**.
+Selectable SFT loss functions were added in `mlx-lm-lora` 3.0.0 and remain available in the current 5.10.2 trainer. Choose one in **Train → Training Settings → SFT loss**.
 
 | Loss | Run-spec value | Use it when |
 |---|---|---|
@@ -20,3 +20,8 @@ Run-spec example:
   "sft_loss_type": "dft"
 }
 ```
+
+## References
+
+- [Wu et al. (2025), *On the Generalization of SFT: A Reinforcement Learning Perspective with Reward Rectification*](https://arxiv.org/abs/2508.05629).
+- Implementation: `vendor/mlx-lm-lora/mlx_lm_lora/trainer/sft_trainer.py`.

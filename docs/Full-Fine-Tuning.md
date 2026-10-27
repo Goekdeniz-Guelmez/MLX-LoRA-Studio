@@ -50,6 +50,10 @@ On the **Train** tab → **Fine-tune** section: pick **FULL** in the segmented F
 - QAT has no effect on a `full` run — it only changes how LoRA/DoRA adapters are trained. If you are doing `train_type=full`, leave `qat_enable = false`.
 - Use a low learning rate: full fine-tuning usually wants `1e-6` to `5e-6` with AdamW.
 
+## References
+
+Full fine-tuning is an adaptation mode, not a distinct algorithm with one originating paper. For an example of supervised fine-tuning in an instruction-following pipeline, see [Ouyang et al. (2022), *Training language models to follow instructions with human feedback*](https://arxiv.org/abs/2203.02155).
+
 ## See also
 
 - [LoRA](LoRA) · [DoRA](DoRA) · [QLoRA](QLoRA) · [Optimizers](Optimizers) · [SFT](SFT)

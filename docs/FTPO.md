@@ -28,3 +28,11 @@ Ordinary DPO `prompt`/`chosen`/`rejected` rows are not interchangeable with FTPO
 FTPO uses a frozen copy of the selected model as its reference by default. Set **Reference model path** only when a different checkpoint should anchor the repair.
 
 Begin with the defaults, a small learning rate, and a short validation run. FTPO is intentionally narrow: use SFT or DPO for broad behavior changes.
+
+## References
+
+[Paech et al. (2025), *Antislop: A Comprehensive Framework for Identifying and Eliminating Repetitive Patterns in Language Models*](https://arxiv.org/abs/2510.15061) introduces FTPO.
+
+[Liquid AI (2026), *Reducing Doom Loops with Final Token Preference Optimization*](https://www.liquid.ai/blog/antidoom) describes the Antidoom data workflow supported here.
+
+Studio trainer implementation: [FTPO source](https://github.com/Goekdeniz-Guelmez/mlx-lm-lora/blob/main/mlx_lm_lora/trainer/ftpo_trainer.py).

@@ -1,4 +1,5 @@
 import importlib.util
+import os
 import sys
 import types
 import unittest
@@ -161,7 +162,21 @@ def install_training_runner_stubs():
     train.load_reward_functions_from_file = mock.Mock()
 
     datasets = types.ModuleType("mlx_lm_lora.trainer.datasets")
-    datasets.CacheDataset = lambda rows: rows
+
+    class CacheDataset:
+        def __init__(self, rows):
+            self._data = rows
+
+        def __len__(self):
+            return len(self._data)
+
+        def __getitem__(self, index):
+            return self._data[index]
+
+        def itemlen(self, index):
+            return len(self._data[index])
+
+    datasets.CacheDataset = CacheDataset
     datasets.load_dataset = mock.Mock(
         return_value=([{"text": "a"}], [{"text": "b"}], [{"text": "c"}])
     )
@@ -225,6 +240,101 @@ def load_training_runner():
 
 
 class TrainingRunnerTests(unittest.TestCase):
+    def test_bounded_dataset_cache_evicts_least_recently_used_rows(self):
+        runner, _stubs = load_training_runner()
+
+        class ProcessedRows:
+            def __init__(self):
+                self.rows = [[0], [1], [2]]
+                self.processed = []
+
+            def __len__(self):
+                return len(self.rows)
+
+            def __getitem__(self, index):
+                return self.rows[index]
+
+            def process(self, row):
+                self.processed.append(row[0])
+                return tuple(row)
+
+        rows = ProcessedRows()
+        cached = runner.BoundedCacheDataset(rows, max_items=2)
+
+        self.assertEqual(cached[0], (0,))
+        self.assertEqual(cached[1], (1,))
+        self.assertEqual(cached[0], (0,))  # Refresh row 0 in the LRU order.
+        self.assertEqual(cached[2], (2,))  # Evicts row 1.
+        self.assertEqual(cached[1], (1,))  # Row 1 must be processed again.
+
+        self.assertEqual(rows.processed, [0, 1, 2, 1])
+        self.assertEqual(len(cached._proc_data), 2)
+        self.assertEqual(list(cached._proc_data), [2, 1])
+
+    def test_bounded_dataset_cache_can_disable_retention(self):
+        runner, _stubs = load_training_runner()
+
+        class ProcessedRows:
+            def __init__(self):
+                self.processed = 0
+
+            def __len__(self):
+                return 1
+
+            def __getitem__(self, _index):
+                return {"text": "example"}
+
+            def process(self, row):
+                self.processed += 1
+                return row["text"]
+
+        rows = ProcessedRows()
+        cached = runner.BoundedCacheDataset(rows, max_items=0)
+
+        self.assertEqual(cached[0], "example")
+        self.assertEqual(cached[0], "example")
+        self.assertEqual(rows.processed, 2)
+        self.assertEqual(cached._proc_data, {})
+
+    def test_dataset_cache_limit_defaults_and_accepts_environment_override(self):
+        runner, _stubs = load_training_runner()
+
+        with mock.patch.dict(os.environ, {}, clear=True):
+            self.assertEqual(
+                runner._dataset_cache_item_limit(), runner.DEFAULT_DATASET_CACHE_ITEMS
+            )
+        with mock.patch.dict(os.environ, {"MLX_LORA_STUDIO_DATASET_CACHE_ITEMS": "17"}):
+            self.assertEqual(runner._dataset_cache_item_limit(), 17)
+        with mock.patch.dict(os.environ, {"MLX_LORA_STUDIO_DATASET_CACHE_ITEMS": "0"}):
+            self.assertEqual(runner._dataset_cache_item_limit(), 0)
+        with mock.patch.dict(
+            os.environ, {"MLX_LORA_STUDIO_DATASET_CACHE_ITEMS": "invalid"}
+        ):
+            self.assertEqual(
+                runner._dataset_cache_item_limit(), runner.DEFAULT_DATASET_CACHE_ITEMS
+            )
+
+    def test_run_bounds_train_and_validation_but_does_not_cache_test_rows(self):
+        runner, stubs = load_training_runner()
+        args = runner._normalize_spec(
+            {"train_mode": "sft", "adapter_path": "adapters", "test": True}
+        )
+
+        with mock.patch.dict(os.environ, {"MLX_LORA_STUDIO_DATASET_CACHE_ITEMS": "2"}):
+            runner.run(args)
+
+        trainer_call = stubs.trainer_calls["sft"].call_args.kwargs
+        train_set = trainer_call["train_dataset"]
+        valid_set = trainer_call["val_dataset"]
+        test_set = stubs.train.evaluate_model.call_args.kwargs["test_set"]
+
+        self.assertIsInstance(train_set, runner.BoundedCacheDataset)
+        self.assertIsInstance(valid_set, runner.BoundedCacheDataset)
+        self.assertIsInstance(test_set, runner.BoundedCacheDataset)
+        self.assertEqual(train_set._max_items, 2)
+        self.assertEqual(valid_set._max_items, 2)
+        self.assertEqual(test_set._max_items, 0)
+
     def test_system_prompt_fallback_only_fills_missing_or_empty_values(self):
         runner, _stubs = load_training_runner()
         rows = [
@@ -680,6 +790,67 @@ class TrainingRunnerTests(unittest.TestCase):
 
         self.assertEqual(args.data, "HuggingFaceH4/no_robots")
         self.assertEqual(args.hf_dataset, "HuggingFaceH4/no_robots")
+        
+    def test_preflight_passes_when_the_runtime_is_available(self):
+        runner, _stubs = load_training_runner()
+
+        self.assertEqual(runner._missing_runtime_modules(), [])
+
+    def test_preflight_reports_the_missing_runtime_modules(self):
+        runner, _stubs = load_training_runner()
+
+        with mock.patch.dict(sys.modules):
+            for name in ("mlx", "mlx_lm", "mlx_lm_lora"):
+                sys.modules.pop(name, None)
+            with mock.patch.object(
+                runner.importlib.util,
+                "find_spec",
+                side_effect=lambda name, package=None: None,
+            ):
+                self.assertEqual(
+                    sorted(runner._missing_runtime_modules()),
+                    ["mlx", "mlx_lm", "mlx_lm_lora"],
+                )
+    def test_failed_test_evaluation_is_reported_not_raised(self):
+        runner, _stubs = load_training_runner()
+        runner.evaluate_model.side_effect = RuntimeError("boom")
+
+        metrics = runner._evaluate_test_split(
+            args=SimpleNamespace(iters=1),
+            model=object(),
+            tokenizer=object(),
+            reference_model=None,
+            judge_model=None,
+            judge_tokenizer=None,
+            test_set=[],
+        )
+
+        self.assertEqual(metrics, {})
+
+    def test_successful_test_evaluation_returns_metrics(self):
+        runner, _stubs = load_training_runner()
+        runner.evaluate_model.side_effect = None
+
+        def _emit(*_args, **_kwargs):
+            print("Test Results:")
+            print("  Loss: 0.512")
+            print("  Perplexity: 1.664")
+            print("  Tokens: 42")
+
+        runner.evaluate_model.side_effect = lambda *a, **k: _emit()
+
+        metrics = runner._evaluate_test_split(
+            args=SimpleNamespace(iters=1),
+            model=object(),
+            tokenizer=object(),
+            reference_model=None,
+            judge_model=None,
+            judge_tokenizer=None,
+            test_set=[],
+        )
+
+        self.assertEqual(metrics.get("test_loss"), 0.512)
+        self.assertEqual(metrics.get("test_ppl"), 1.664)
 
 
 if __name__ == "__main__":

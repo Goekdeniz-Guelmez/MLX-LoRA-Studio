@@ -73,7 +73,7 @@ Shared form: Model & Data; Fine-tune (LoRA/DoRA/Full + Quantization); Training S
 
 ## References
 
-- Rafailov et al., 2023, *Direct Preference Optimization: Your Language Model is Secretly a Reward Model*.
+- [Rafailov et al. (2023), *Direct Preference Optimization: Your Language Model is Secretly a Reward Model*](https://arxiv.org/abs/2305.18290).
 - Implementation: `vendor/mlx-lm-lora/mlx_lm_lora/trainer/dpo_trainer.py`.
 
 ## See also

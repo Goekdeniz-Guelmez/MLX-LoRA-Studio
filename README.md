@@ -7,44 +7,28 @@
 </p>
 
 <p align="center">
-  <em>
-    There is a quiet kind of power in running a model on the machine that sits in front of you.<br>
-    MLX LoRA Studio puts fine-tuning on your Mac — local, native, and visible end to end.<br>
-    Pick a model, choose an algorithm, watch the loss fall. The cloud is optional, the code is optional, the mystery is not.
-  </em>
+  Train locally, inspect each run, and keep control of your model and data.
 </p>
-
-<p align="center">
-  <img src="https://img.shields.io/badge/IMPORTANT-FIRST%20LAUNCH%20STEP-red?style=for-the-badge" alt="Important first launch step">
-</p>
-
-<div style="border: 4px solid #d1242f; background: #fff1f1; color: #8a1118; padding: 18px 22px; margin: 24px 0; font-size: 1.15rem;">
-  <strong>Important macOS first-launch step after installing:</strong><br><br>
-  Because this first open-source release is distributed outside the Mac App Store and is not yet notarized, macOS may show a scary "damaged", "cannot be opened", or unidentified developer warning. This does <strong>not</strong> mean the app is malware. It is Apple's quarantine flag on a freshly downloaded app bundle.<br><br>
-  After dragging <strong>MLX LoRA Studio.app</strong> into <strong>/Applications</strong>, and before opening it for the first time, open Terminal and run:
-  <pre><code>sudo xattr -dr com.apple.quarantine "/Applications/MLX LoRA Studio.app"</code></pre>
-  Then open the app normally from <strong>/Applications</strong>. You only need to do this once per installed copy.
-</div>
 
 ---
 
 ## Table of contents
 
-- [Release v2.0.0](#release-v200)
+- [Training stack](#training-stack)
 - [Why MLX LoRA Studio?](#why-mlx-lora-studio)
 - [What it is](#what-it-is)
 - [What it isn't](#what-it-isnt)
 - [Features at a glance](#features-at-a-glance)
 - [Screenshots](#screenshots)
 - [Installation](#installation)
-- [Quick start (60 seconds)](#quick-start-60-seconds)
+- [Quick start](#quick-start)
 - [A guided tour of the app](#a-guided-tour-of-the-app)
   - [Train](#train)
   - [Live Metrics](#live-metrics)
   - [Upload to HF](#upload-to-hf)
   - [Algorithm Guide](#algorithm-guide)
   - [Runs](#runs)
-  - [Settings & Onboarding](#settings--onboarding)
+  - [Settings](#settings)
 - [The training pipeline under the hood](#the-training-pipeline-under-the-hood)
 - [Supported training methods](#supported-training-methods)
 - [Configuration reference](#configuration-reference)
@@ -58,26 +42,21 @@
 
 ---
 
-## mlx-lm-lora 5.8.6
+## Training stack
 
-**The bundled backend is now `mlx-lm-lora` 5.8.6.** It adds two trainers and new memory controls:
+The repository currently vendors [`mlx-lm-lora` 5.10.2](vendor/mlx-lm-lora/), the Python
+training package behind the app. Studio runs its trainer locally on Apple Silicon and
+surfaces its settings, progress, logs, and saved adapters in a native macOS interface.
+Version 5.10.2 adds epoch-based training budgets and a read-only `calculate_iters` MCP tool,
+fixes completed-run detection after restarts, and makes Hugging Face dataset loading tolerate
+incomplete optional PyTorch namespaces.
 
-- **DSLA** (Directional and Similarity-aware Latent Alignment) on top of DPO, ORPO, or CPO.
-- **KLPO** (KL-Regularized Policy Optimization), a critic-free RL loop using the GRPO reward functions.
-- A **recurrence chunk size** setting and fast VJPs for hybrid and SSM models (Qwen3.5/Next, Kimi Linear, Mamba, Jamba).
-- **Micro-batched judge scoring** for Online DPO, XPO, PPO, and RLHF Reinforce.
-- Online RL modes now require an explicit judge model, and the backend needs **Python 3.11+**.
-
-## Release v2.0.0
-
-**MLX LoRA Studio v2.0.0 updates the app for `mlx-lm-lora` 3.1.2.**
-
-This release adds FTPO, Dynamic Fine-Tuning, and memory-bounded Chunked NLL while aligning
-the native training runner and documentation with the `mlx-lm-lora` 3.1.2 API. Synthetic
-dataset creation has been removed from the active app workflow, while historical synthetic
-run folders remain readable in the Runs archive.
-
-If you need detialed and longer explanations for the algorythms used, then visit the [wiki](https://goekdeniz-guelmez.github.io/MLX-LoRA-Studio/) page.
+- **DSLA** (Directional and Similarity-aware Latent Alignment) extends DPO, ORPO, or CPO.
+- **KLPO** (KL-Regularized Policy Optimization) adds a critic-free RL loop using GRPO reward functions.
+- **FTPO** (Fine-grained Token Preference Optimization) learns from token-level preference data.
+- A recurrence chunk size and fast VJPs support hybrid and SSM models such as Qwen3.5/Next,
+  Kimi Linear, Mamba, and Jamba.
+- Online preference and RL methods use an explicit judge model. The backend requires Python 3.11+.
 
 ### What's included
 
@@ -109,24 +88,17 @@ If you need detialed and longer explanations for the algorythms used, then visit
 
 ## Why MLX LoRA Studio?
 
-Fine-tuning a large language model used to mean renting a GPU, installing a Python environment
-the size of a refrigerator, and babysitting a Jupyter notebook for two days. **MLX LoRA Studio
-exists to make that loop feel like using a normal Mac app:**
+Studio puts model selection, training controls, resource estimates, run logs, and adapter
+outputs in one native Mac app. Training executes locally on Apple Silicon. Model and dataset
+downloads use the network, and publishing an adapter to Hugging Face is an explicit step.
 
-- **One click to fine-tune.** Pick a model, point it at a dataset, hit *Run*. The app handles
-  the Python environment, the dependency install, the adapter paths, the resume logic, the
-  metrics, the runs archive, and the export to Hugging Face.
-- **Local, on-device, private.** Your prompts, your model, your weights, your disk. No data
-  leaves your Mac unless you choose to push it to the Hub at the end.
-- **Real algorithms, not toy versions.** SFT, DPO, DSLA, FTPO, CPO, ORPO, GRPO, KLPO, Online DPO,
-  XPO, RLHF Reinforce, PPO — with QLoRA, DoRA, full fine-tuning, and **Quantization-Aware Training (QAT)**.
-- **Built for everyone.** A beginner can ship a LoRA-tuned Llama model on their M-series Mac
-  without writing a line of code. An ML researcher can drop into the YAML config and pin
-  every hyperparameter they care about.
-- **The trainer is mine, and yours.** MLX LoRA Studio wraps
-  [`mlx-lm-lora`](https://github.com/Goekdeniz-Guelmez/mlx-lm-lora) — the same project,
-  vendored at `vendor/mlx-lm-lora/`, so what runs in the GUI is exactly what you can run
-  from the CLI, and vice versa.
+- The app provisions or finds the Python environment and the `mlx-lm-lora` trainer.
+- Twelve supervised, preference, and reinforcement algorithms are available alongside LoRA,
+  DoRA, QLoRA, full fine-tuning, and Quantization-Aware Training.
+- YAML configurations, live metrics, logs, and saved adapters remain inspectable.
+- The companion [`mlx-lm-lora` Python package](https://github.com/Goekdeniz-Guelmez/mlx-lm-lora)
+  can also be used directly from the command line or from the
+  [open notebook examples](https://github.com/Goekdeniz-Guelmez/mlx-lm-lora-example-notebooks).
 
 ---
 
@@ -154,7 +126,7 @@ exists to make that loop feel like using a normal Mac app:**
 
 ## Features at a glance
 
-### 🧠 Training
+### Training
 
 - **12 training algorithms** out of the box: SFT, DPO, DSLA, FTPO, CPO, ORPO, GRPO, KLPO,
   Online DPO, XPO, RLHF Reinforce, PPO. Pick by use case, not by which one is wired up.
@@ -168,7 +140,7 @@ exists to make that loop feel like using a normal Mac app:**
 - **YAML-driven configuration** — the GUI's form is a *view* over a YAML config; the
   same config can be exported and rerun on the CLI.
 
-### 📊 Live observability
+### Live observability
 
 - **Live metrics panel** with loss, learning rate, gradient norm, throughput, and a
   refreshable plot of recent steps.
@@ -177,15 +149,14 @@ exists to make that loop feel like using a normal Mac app:**
 - **Run progress bar** in the sidebar while a job is in flight.
 - **Pause / resume / stop** from the toolbar without losing the run.
 
-### 🚀 Publish
+### Publish
 
 - **One-click Hugging Face upload** of adapters (LoRA / DoRA / QLoRA / QAT) with
   metadata, model card, and license pickers.
-- **Runs archive** — every run's config, logs, and final adapter weights are kept in
-  `~/Library/Application Support/MLXLoRAStudio/runs/` and surfaced in the *Runs* tab
-  for re-run, resume, or upload.
+- **Runs archive** — each run keeps its configuration, logs, and adapter output in the
+  configured run folder, surfaced in *Runs* for inspection, resume, or upload.
 
-### 🛠 Engineering
+### Engineering
 
 - **Python environment discovery & provisioning** — Studio finds an existing venv/conda
   env that has the trainer installed, or provisions one for you. No "I forgot to install
@@ -204,18 +175,7 @@ exists to make that loop feel like using a normal Mac app:**
 1. Go to the [Releases](../../releases) page.
 2. Download the latest `MLX-LoRA-Studio-X.Y.Z.dmg`.
 3. Open the DMG, drag **MLX LoRA Studio** to **/Applications**.
-4. Before opening it for the first time, run this in Terminal:
-
-   ```bash
-   sudo xattr -dr com.apple.quarantine "/Applications/MLX LoRA Studio.app"
-   ```
-
-   This clears Apple's quarantine flag from the downloaded app bundle. It is needed for
-   this first open-source release because the app is distributed outside the Mac App Store
-   and is not yet notarized; it does **not** mean the app is malware.
-5. Launch it from `/Applications` (or `Spotlight`).
-6. On first launch, allow the bundled Python helper to be opened in **System Settings →
-   Privacy & Security** (Gatekeeper).
+4. Eject the DMG, then launch the app from `/Applications` or Spotlight.
 
 The first time you start a run, Studio will **discover or provision** a Python environment
 with the right dependencies — no terminal needed.
@@ -236,18 +196,21 @@ See [Building from source](#building-from-source) below.
 
 ---
 
-## Quick start (60 seconds)
+## Quick start
 
 1. **Launch MLX LoRA Studio.**
 2. On the **Train** tab:
-   - Pick a **base model** (any MLX-compatible model you've already pulled into your
-     HF cache, e.g. `mlx-community/Meta-Llama-3-8B-Instruct-4bit`).
-   - Pick a **dataset** (e.g. `mlx-community/JOSIE-v2-Instruct-5K`).
+   - Pick an **MLX-compatible base model** from your local Hugging Face cache, such as
+     `mlx-community/SmolLM2-135M-Instruct-4bit`.
+     The worked examples below use the upstream
+     [`HuggingFaceTB/SmolLM2-135M-Instruct`](https://huggingface.co/HuggingFaceTB/SmolLM2-135M-Instruct)
+     checkpoint converted to MLX format.
+   - Pick a **dataset** from your local cache, such as `d1272/MetaPrompt-Architect-500`.
    - Leave the algorithm at **SFT** for a first run.
    - Hit **Run** in the toolbar.
 3. The **sidebar memory card** updates in real time; the **Live Metrics** tab shows
    loss / learning rate as the run progresses. Pause, resume, or stop from the toolbar.
-4. When the run finishes, head to the **Runs** tab → open the run → **Upload to HF**
+4. When the run finishes, open **Runs** → select the run → **Upload to HF**
    to publish the adapter.
 
 > **Tip:** the **Algorithm Guide** tab in the sidebar explains *why* you'd pick DPO
@@ -258,27 +221,28 @@ See [Building from source](#building-from-source) below.
 
 ## A guided tour of the app
 
-The app is organised around a left-hand sidebar with seven sections. Each one maps to a
-single screen in the detail pane.
+The sidebar has six main views: Train, Live Metrics, Upload to HF, Algorithm Guide, Runs,
+and MCP Server. About and Settings are available from the app interface.
 
 ### Train
 
 <p align="center">
-  <img src="Sources/Media/app_train_active.png" alt="MLX LoRA Studio" width="100%">
+  <img src="Sources/Media/app_train_active.png" alt="Full-screen DPO training in MLX LoRA Studio with SmolLM2, preference data, MXFP4 settings, and completed run logs" width="100%">
 </p>
 
-The heart of the app. The form is grouped into:
+The training form is grouped into:
 
-1. **Model & data** — base model, dataset, chat template, max sequence length, packing.
-2. **Adapter shape** — LoRA rank, alpha, dropout, target modules; or switch to DoRA /
-   QLoRA / full fine-tune; or enable QAT with a target bit width.
-3. **Optimization** — learning rate, schedule, warmup, weight decay, grad accumulation,
-   max steps / epochs.
-4. **Algorithm-specific** — only the fields the selected algorithm actually uses.
-   For SFT: completion-only loss. For DPO/CPO/ORPO: beta, label smoothing. For GRPO/PPO:
-   judge model, reward shaping, group size, KL coefficient.
-5. **Resume / output** — where to write the adapter, whether to resume from an existing
-   checkpoint, and how often to save.
+1. **Algorithm and model family** — select one of the supported training methods and
+   text or vision-language input.
+2. **Fine-tuning method** — choose LoRA, DoRA, or full fine-tuning, with quantization
+   and adapter settings where they apply.
+3. **Model and data** — select the model and dataset, plus dataset-column mappings when
+   the source schema needs them.
+4. **Training settings** — set iterations or epochs, batch size, sequence length,
+   learning rate, optimizer, reporting, evaluation, and gradient options.
+5. **Algorithm-specific settings** — preference loss and beta, judge/reward options,
+   or SFT loss settings are shown for the selected method.
+6. **Output** — choose where the run and adapter are saved.
 
 A **memory estimate** at the bottom of the form shows what the current configuration
 *should* cost, so you can change a knob and immediately see the projected effect.
@@ -286,20 +250,20 @@ A **memory estimate** at the bottom of the form shows what the current configura
 ### Live Metrics
 
 <p align="center">
-  <img src="Sources/Media/app_live_metrics.png" alt="MLX LoRA Studio" width="100%">
+  <img src="Sources/Media/app_live_metrics.png" alt="Full-screen live metrics view for the completed ORPO run, including loss, chosen and rejected rewards, throughput, memory, and reported metrics" width="100%">
 </p>
 
-A second-by-second view of what the runner is doing:
+A live view of the selected run:
 
 - Loss / reward / KL over the last N steps, with a refreshable line plot.
 - Throughput (tokens/sec) and elapsed time.
-- A scrolling console of the last lines of stdout/stderr from the Python job, for when
-  something looks off and you want to read the underlying trace.
+- Recent step metrics, a loss chart, and run progress.
+- The Train view also keeps the streaming run console beside the configuration.
 
 ### Upload to HF
 
 <p align="center">
-  <img src="Sources/Media/app_upload.png" alt="MLX LoRA Studio" width="100%">
+  <img src="Sources/Media/app_upload.png" alt="Full-screen Hugging Face upload page showing separate model and dataset upload workflows" width="100%">
 </p>
 
 A guided form for pushing a finished adapter to the Hugging Face Hub:
@@ -312,10 +276,10 @@ A guided form for pushing a finished adapter to the Hugging Face Hub:
 ### Algorithm Guide
 
 <p align="center">
-  <img src="Sources/Media/app_algorythm_guide.png" alt="MLX LoRA Studio" width="100%">
+  <img src="Sources/Media/app_algorythm_guide.png" alt="Full-screen Algorithm Guide listing all 12 training methods and opening the ORPO explanation" width="100%">
 </p>
 
-A built-in reference for the 9 supported algorithms. Each entry covers:
+A built-in reference for the supported algorithms. Each entry covers:
 
 - **What it is** in one paragraph, with the math in plain words.
 - **When to use it** — the practical "SFT first, then DPO" ladder.
@@ -328,7 +292,7 @@ isn't sure which one applies to their data.
 ### Runs
 
 <p align="center">
-  <img src="Sources/Media/app_runs.png" alt="MLX LoRA Studio" width="100%">
+  <img src="Sources/Media/app_runs.png" alt="Full-screen Runs view with completed SFT, DPO, and ORPO runs on SmolLM2" width="100%">
 </p>
 
 A table of every run Studio has ever done, sorted by recency:
@@ -339,14 +303,40 @@ A table of every run Studio has ever done, sorted by recency:
 - Actions: **Open** (loads it back into the form), **Resume** (start a new run from
   the same adapter), **Upload to HF**, **Reveal in Finder**, **Delete**.
 
-### Settings & Onboarding
+### Settings
 
-- **Settings** controls the Python environment Studio should use (auto-discovered,
-  pinned to a specific venv, or freshly provisioned), HF cache paths, default
-  templates, and the optional animated background.
-- **Onboarding** is a 5-step tour shown on first launch: it walks through picking
-  a model, picking a dataset, choosing an algorithm, starting a run, and finding
-  the metrics. It can be re-opened from the **About** tab.
+- **Settings** controls the Python environment, output location, and Hugging Face
+  credentials. Credentials are stored in Keychain; the app reports their status without
+  displaying the token.
+
+---
+
+## Small, real training runs
+
+These full-screen captures come from short runs in the app, all using the same
+[`HuggingFaceTB/SmolLM2-135M-Instruct`](https://huggingface.co/HuggingFaceTB/SmolLM2-135M-Instruct)
+base model. The Hub model was converted to MLX format
+before training and quantized with MXFP4 so its layer dimensions fit the selected group size.
+Each run used 10 training steps to demonstrate the workflow and live reporting. These runs
+are not model-quality benchmarks.
+
+| Run | Dataset | What the method does |
+|-----|---------|----------------------|
+| SFT | [d1272/MetaPrompt-Architect-500](https://huggingface.co/datasets/d1272/MetaPrompt-Architect-500), 500 chat rows, MIT | Learns from example conversations. |
+| DPO | [Taichi11/dpo_dataset_v4](https://huggingface.co/datasets/Taichi11/dpo_dataset_v4), 2,878 preference pairs, Apache-2.0; demo uses 100 rows | Prefers the chosen response over the rejected response. |
+| ORPO | Same 100-row preference subset | Combines supervised learning and preference odds in one objective. |
+
+<p align="center">
+  <img src="Sources/Media/app_sft_run.png" alt="Full-screen SFT run on SmolLM2 using the 500-row MetaPrompt chat dataset, with all 10 training steps and logs visible" width="100%">
+</p>
+
+<p align="center">
+  <img src="Sources/Media/app_dpo_run.png" alt="Full-screen DPO run on SmolLM2 using a 100-row slice of the Taichi preference dataset, with chosen and rejected examples and completed logs" width="100%">
+</p>
+
+<p align="center">
+  <img src="Sources/Media/app_orpo_run.png" alt="Full-screen ORPO run on SmolLM2 using the same 100-row preference dataset slice, with all 10 training steps and logs visible" width="100%">
+</p>
 
 ---
 
@@ -394,9 +384,9 @@ Mirrored from the underlying `mlx-lm-lora` trainer:
 
 | Family   | Algorithms                                                                                  |
 |----------|---------------------------------------------------------------------------------------------|
-| Supervised fine-tuning | SFT                                                                                |
-| Preference             | DPO, CPO, ORPO                                                                      |
-| RL / online            | GRPO, Online DPO, XPO, RLHF Reinforce, PPO                                           |
+| Supervised fine-tuning | SFT |
+| Preference optimization | DPO, DSLA, FTPO, CPO, ORPO |
+| Reinforcement learning | GRPO, KLPO, Online DPO, XPO, RLHF Reinforce, PPO |
 
 | Adapter type                  | Notes                                                          |
 |-------------------------------|----------------------------------------------------------------|
@@ -418,13 +408,12 @@ takes). You can find every run's config in `~/Library/Application Support/MLXLoR
 A minimal SFT example:
 
 ```yaml
-# This file was generated by MLX LoRA Studio and is safe to edit by hand.
-# The same file can be passed to `mlx_lm_lora` on the CLI.
+# Example configuration; available options depend on the selected algorithm.
 
 train_mode: sft
-model: mlx-community/Meta-Llama-3-8B-Instruct-4bit
+model: mlx-community/SmolLM2-135M-Instruct-4bit
 dataset:
-  - mlx-community/JOSIE-v2-Instruct-5K
+  - d1272/MetaPrompt-Architect-500
 adapter:
   type: lora
   rank: 16
@@ -471,6 +460,12 @@ cost, given the base model size, the sequence length, the adapter shape, and the
 quantization mode. **ResourceGuard** refuses to start a run whose estimated cost
 would push the system into swap.
 
+The Python runner keeps a bounded cache of tokenized training and validation
+examples (512 examples per split by default) and does not cache the one-pass test
+split. Set `MLX_LORA_STUDIO_DATASET_CACHE_ITEMS=0` before launching the app to
+disable processed-example caching, or set another non-negative value to change
+the per-split limit.
+
 ---
 
 ## Building from source
@@ -479,13 +474,17 @@ Requires the Xcode command-line tools (Swift 5.9+, macOS 14+ SDK):
 
 ```bash
 git clone https://github.com/Goekdeniz-Guelmez/MLX-LoRA-Studio.git
-cd mlx-lm-lora-app
+cd MLX-LoRA-Studio
 
 # Build + run the app:
 ./script/build_and_run.sh
 
 # Build a release .dmg:
 ./script/build_and_run.sh --package
+
+# Build locally and upload the assets to a GitHub Release:
+gh auth login
+./script/build_and_run.sh --release-package
 
 # Open the .app in lldb:
 ./script/build_and_run.sh --debug
@@ -494,11 +493,23 @@ cd mlx-lm-lora-app
 ./script/build_and_run.sh --logs
 ```
 
+To sign a local package with Developer ID and notarize the DMG, copy
+`apple/signing.local.env.example` to `apple/signing.local.env`, set your Developer
+ID identity and team ID, create the suggested `notarytool` keychain profile, and
+set `NOTARY_PROFILE` to that profile name.
+The build script loads that ignored local file automatically. When a notary
+profile is configured, `--package`, `--release-assets`, and `--release-package`
+submit and staple the resulting DMG. You can instead provide `NOTARY_APPLE_ID`,
+`NOTARY_TEAM_ID`, and `NOTARY_PASSWORD`; the keychain profile is preferred so
+the app-specific password does not need to be stored in a file.
+`--release-package` uses the version in the `version` file, then creates or
+updates the matching GitHub release and uploads the DMG, checksum, and app ZIP.
+
 The build script:
 
 1. Compiles all Swift files in `Sources/MLXLoRAStudio/` with `swiftc` against
    `SwiftUI` and `AppKit`.
-2. Fetches the pinned `mlx-lm-lora` 5.8.6 checkout when it is absent, then
+2. Fetches the pinned `mlx-lm-lora` 5.10.2 checkout when it is absent, then
    bundles it with the app icon and Python helper (`Backend/`) into
    `Contents/Resources/`. The checkout and Python environment remain local and
    are not committed to source control.
@@ -532,7 +543,7 @@ provision one).
 ├── script/
 │   └── build_and_run.sh             # Builds .app + .dmg
 ├── Tests/
-├── .github/workflows/release.yml    # Tag-driven release pipeline
+├── .github/workflows/tests.yml      # Backend test workflow
 ├── Package.swift                    # SwiftPM manifest
 ├── version                          # Single source of truth for the app version
 └── README.md

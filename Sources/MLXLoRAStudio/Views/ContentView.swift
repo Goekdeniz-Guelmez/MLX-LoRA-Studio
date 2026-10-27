@@ -72,6 +72,8 @@ struct ContentView: View {
             AlgorithmGuideView(config: $store.training)
         case .runs:
             RunsView(store: store)
+        case .mcp:
+            MCPServerView(store: store)
         case .about:
             AboutView()
         }

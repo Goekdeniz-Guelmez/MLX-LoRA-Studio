@@ -7,7 +7,7 @@ APP_NAME="MLXLoRAStudio"
 BUNDLE_ID="io.github.goekdeniz-guelmez.mlx-lora-studio"
 MIN_SYSTEM_VERSION="14.0"
 APP_ARCHITECTURE="${APP_ARCHITECTURE:-arm64}"
-MLX_LM_LORA_VERSION="5.8.6"
+MLX_LM_LORA_VERSION="5.10.2"
 MLX_LM_LORA_REPOSITORY="https://github.com/Goekdeniz-Guelmez/mlx-lm-lora.git"
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -23,6 +23,15 @@ DMG_VOLUME_NAME="MLX LoRA Studio"
 DMG_BACKGROUND_SOURCE="$ROOT_DIR/Sources/Media/logo_ultra-wide.png"
 DMG_BACKGROUND_NAME="logo_ultra-wide.png"
 DMG_ICON_SOURCE="$ROOT_DIR/Sources/Media/logo.png"
+SIGNING_ENV_FILE="${SIGNING_ENV_FILE:-$ROOT_DIR/apple/signing.local.env}"
+
+# Local Developer ID credentials stay outside source control. The file uses
+# shell assignment syntax; callers can point SIGNING_ENV_FILE elsewhere.
+if [[ -f "$SIGNING_ENV_FILE" ]]; then
+  # shellcheck disable=SC1090
+  source "$SIGNING_ENV_FILE"
+fi
+
 CODE_SIGN_IDENTITY="${CODE_SIGN_IDENTITY:--}"
 
 ensure_vendored_backend() {
@@ -52,6 +61,7 @@ swiftc \
   -target "${APP_ARCHITECTURE}-apple-macosx${MIN_SYSTEM_VERSION}" \
   "$ROOT_DIR/Sources/MLXLoRAStudio/App/MLXLoRAStudioApp.swift" \
   "$ROOT_DIR/Sources/MLXLoRAStudio/Models/TrainingModels.swift" \
+  "$ROOT_DIR/Sources/MLXLoRAStudio/Models/MCPModels.swift" \
   "$ROOT_DIR/Sources/MLXLoRAStudio/Models/PythonEnvironment.swift" \
   "$ROOT_DIR/Sources/MLXLoRAStudio/Support/MemoryEstimator.swift" \
   "$ROOT_DIR/Sources/MLXLoRAStudio/Support/LiveMemoryMonitor.swift" \
@@ -64,6 +74,9 @@ swiftc \
   "$ROOT_DIR/Sources/MLXLoRAStudio/Services/HFCacheScanner.swift" \
   "$ROOT_DIR/Sources/MLXLoRAStudio/Services/IOGPUWiredLimitService.swift" \
   "$ROOT_DIR/Sources/MLXLoRAStudio/Services/JobCompletionNotifier.swift" \
+  "$ROOT_DIR/Sources/MLXLoRAStudio/Services/MCPServerController.swift" \
+  "$ROOT_DIR/Sources/MLXLoRAStudio/Services/MCPRunDashboardReader.swift" \
+  "$ROOT_DIR/Sources/MLXLoRAStudio/Services/MCPCommunitySkillInstaller.swift" \
   "$ROOT_DIR/Sources/MLXLoRAStudio/Views/ContentView.swift" \
   "$ROOT_DIR/Sources/MLXLoRAStudio/Views/OnboardingTourView.swift" \
   "$ROOT_DIR/Sources/MLXLoRAStudio/Views/SidebarView.swift" \
@@ -76,6 +89,7 @@ swiftc \
   "$ROOT_DIR/Sources/MLXLoRAStudio/Views/AboutView.swift" \
   "$ROOT_DIR/Sources/MLXLoRAStudio/Views/LiveRunPanel.swift" \
   "$ROOT_DIR/Sources/MLXLoRAStudio/Views/LiveMetricsView.swift" \
+  "$ROOT_DIR/Sources/MLXLoRAStudio/Views/MCPServerView.swift" \
   "$ROOT_DIR/Sources/MLXLoRAStudio/Views/SharedControls.swift" \
   "$ROOT_DIR/Sources/MLXLoRAStudio/Views/PythonPickerSection.swift" \
   "$ROOT_DIR/Sources/MLXLoRAStudio/Views/HFAssetPicker.swift" \
@@ -278,7 +292,37 @@ build_dmg() {
   /usr/bin/hdiutil convert "$rw_image" -format UDZO -imagekey zlib-level=9 -o "$dmg_path" >/dev/null
 
   rm -rf "$stage" "$rw_image"
+  notarize_dmg "$dmg_path"
   echo "Built $dmg_path"
+}
+
+notarize_dmg() {
+  local dmg_path="$1"
+  local args=(submit "$dmg_path")
+  local apple_id="${NOTARY_APPLE_ID:-}"
+  local team_id="${NOTARY_TEAM_ID:-}"
+  local notary_password="${NOTARY_PASSWORD:-}"
+  local notary_profile="${NOTARY_PROFILE:-}"
+
+  if [[ -n "$notary_profile" ]]; then
+    args+=(--keychain-profile "$notary_profile")
+    [[ -z "$team_id" ]] || args+=(--team-id "$team_id")
+  elif [[ -n "$apple_id" && -n "$team_id" && -n "$notary_password" ]]; then
+    args+=(--apple-id "$apple_id" --team-id "$team_id" --password "$notary_password")
+  else
+    echo "Skipping notarization; configure NOTARY_PROFILE or all Apple ID credentials in $SIGNING_ENV_FILE."
+    return 0
+  fi
+
+  if [[ "$CODE_SIGN_IDENTITY" == "-" ]]; then
+    echo "Notarization requires a Developer ID signed app; set CODE_SIGN_IDENTITY." >&2
+    return 1
+  fi
+
+  echo "Submitting $(basename "$dmg_path") for notarization..."
+  /usr/bin/xcrun notarytool "${args[@]}" --wait
+  /usr/bin/xcrun stapler staple "$dmg_path"
+  /usr/bin/xcrun stapler validate "$dmg_path"
 }
 
 build_release_assets() {

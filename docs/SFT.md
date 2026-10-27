@@ -8,7 +8,7 @@
 
 **Supervised fine-tuning (SFT)** trains the model to maximise the log-probability it assigns to a completion, given a prompt. Every example is a `(prompt, completion)` pair (or a chat-style `messages` list, or a raw `text` blob). Prompt tokens are masked out so the loss only counts the answer.
 
-In `mlx-lm-lora` the SFT trainer is the substrate that every other algorithm reuses. Version 5.8.6 offers NLL, memory-bounded Chunked NLL, and [Dynamic Fine-Tuning](Dynamic-Fine-Tuning) objectives. Gradient checkpointing, KV-cache handling, QAT hooks, and the sequence-chunked efficient-long-context forward pass also live in `sft_trainer.py`.
+In `mlx-lm-lora` the SFT trainer is the substrate that every other algorithm reuses. The current 5.10.2 trainer supports NLL, memory-bounded Chunked NLL, and [Dynamic Fine-Tuning](Dynamic-Fine-Tuning) objectives. Gradient checkpointing, KV-cache handling, QAT hooks, and the sequence-chunked efficient-long-context forward pass also live in `sft_trainer.py`.
 
 ## Intuition
 
@@ -132,7 +132,8 @@ On the **Train** tab, SFT uses only the shared form — there is no algorithm-sp
 
 ## References
 
-- SFT as next-token cross-entropy is the standard language-model pretraining/finetuning objective (Vaswani et al., 2017; Radford et al., 2018/2019).
+- Instruction-following SFT in an RLHF pipeline: [Ouyang et al. (2022), *Training language models to follow instructions with human feedback*](https://arxiv.org/abs/2203.02155).
+- The next-token cross-entropy objective is a general language-model training objective, not a method introduced by a single SFT paper.
 - Implementation: `vendor/mlx-lm-lora/mlx_lm_lora/trainer/sft_trainer.py` (`default_loss`).
 
 ## See also

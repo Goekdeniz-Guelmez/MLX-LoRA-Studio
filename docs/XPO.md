@@ -70,7 +70,8 @@ Shared form: Model & Data; Fine-tune (LoRA/DoRA/Full + Quantization); Training S
 
 ## References
 
-- XPO builds on Online DPO (and thus DPO, Rafailov et al., 2023) with an additive KL exploration bonus.
+- [Xie et al. (2024), *Exploratory Preference Optimization: Harnessing Implicit Q*-Approximation for Sample-Efficient RLHF*](https://arxiv.org/abs/2405.21046).
+- XPO builds on the [DPO objective (Rafailov et al., 2023)](https://arxiv.org/abs/2305.18290) with an additive KL exploration bonus.
 - Implementation: `vendor/mlx-lm-lora/mlx_lm_lora/trainer/xpo_trainer.py`.
 
 ## See also
