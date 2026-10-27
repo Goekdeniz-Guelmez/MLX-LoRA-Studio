@@ -14,18 +14,6 @@
   </em>
 </p>
 
-<p align="center">
-  <img src="https://img.shields.io/badge/IMPORTANT-FIRST%20LAUNCH%20STEP-red?style=for-the-badge" alt="Important first launch step">
-</p>
-
-<div style="border: 4px solid #d1242f; background: #fff1f1; color: #8a1118; padding: 18px 22px; margin: 24px 0; font-size: 1.15rem;">
-  <strong>Important macOS first-launch step after installing:</strong><br><br>
-  Because this first open-source release is distributed outside the Mac App Store and is not yet notarized, macOS may show a scary "damaged", "cannot be opened", or unidentified developer warning. This does <strong>not</strong> mean the app is malware. It is Apple's quarantine flag on a freshly downloaded app bundle.<br><br>
-  After dragging <strong>MLX LoRA Studio.app</strong> into <strong>/Applications</strong>, and before opening it for the first time, open Terminal and run:
-  <pre><code>sudo xattr -dr com.apple.quarantine "/Applications/MLX LoRA Studio.app"</code></pre>
-  Then open the app normally from <strong>/Applications</strong>. You only need to do this once per installed copy.
-</div>
-
 ---
 
 ## Table of contents
@@ -204,18 +192,7 @@ exists to make that loop feel like using a normal Mac app:**
 1. Go to the [Releases](../../releases) page.
 2. Download the latest `MLX-LoRA-Studio-X.Y.Z.dmg`.
 3. Open the DMG, drag **MLX LoRA Studio** to **/Applications**.
-4. Before opening it for the first time, run this in Terminal:
-
-   ```bash
-   sudo xattr -dr com.apple.quarantine "/Applications/MLX LoRA Studio.app"
-   ```
-
-   This clears Apple's quarantine flag from the downloaded app bundle. It is needed for
-   this first open-source release because the app is distributed outside the Mac App Store
-   and is not yet notarized; it does **not** mean the app is malware.
-5. Launch it from `/Applications` (or `Spotlight`).
-6. On first launch, allow the bundled Python helper to be opened in **System Settings →
-   Privacy & Security** (Gatekeeper).
+4. Eject the DMG, then launch the app from `/Applications` or Spotlight.
 
 The first time you start a run, Studio will **discover or provision** a Python environment
 with the right dependencies — no terminal needed.
