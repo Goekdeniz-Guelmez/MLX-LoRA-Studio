@@ -61,6 +61,7 @@ swiftc \
   -target "${APP_ARCHITECTURE}-apple-macosx${MIN_SYSTEM_VERSION}" \
   "$ROOT_DIR/Sources/MLXLoRAStudio/App/MLXLoRAStudioApp.swift" \
   "$ROOT_DIR/Sources/MLXLoRAStudio/Models/TrainingModels.swift" \
+  "$ROOT_DIR/Sources/MLXLoRAStudio/Models/MCPModels.swift" \
   "$ROOT_DIR/Sources/MLXLoRAStudio/Models/PythonEnvironment.swift" \
   "$ROOT_DIR/Sources/MLXLoRAStudio/Support/MemoryEstimator.swift" \
   "$ROOT_DIR/Sources/MLXLoRAStudio/Support/LiveMemoryMonitor.swift" \
@@ -73,6 +74,9 @@ swiftc \
   "$ROOT_DIR/Sources/MLXLoRAStudio/Services/HFCacheScanner.swift" \
   "$ROOT_DIR/Sources/MLXLoRAStudio/Services/IOGPUWiredLimitService.swift" \
   "$ROOT_DIR/Sources/MLXLoRAStudio/Services/JobCompletionNotifier.swift" \
+  "$ROOT_DIR/Sources/MLXLoRAStudio/Services/MCPServerController.swift" \
+  "$ROOT_DIR/Sources/MLXLoRAStudio/Services/MCPRunDashboardReader.swift" \
+  "$ROOT_DIR/Sources/MLXLoRAStudio/Services/MCPCommunitySkillInstaller.swift" \
   "$ROOT_DIR/Sources/MLXLoRAStudio/Views/ContentView.swift" \
   "$ROOT_DIR/Sources/MLXLoRAStudio/Views/OnboardingTourView.swift" \
   "$ROOT_DIR/Sources/MLXLoRAStudio/Views/SidebarView.swift" \
@@ -85,6 +89,7 @@ swiftc \
   "$ROOT_DIR/Sources/MLXLoRAStudio/Views/AboutView.swift" \
   "$ROOT_DIR/Sources/MLXLoRAStudio/Views/LiveRunPanel.swift" \
   "$ROOT_DIR/Sources/MLXLoRAStudio/Views/LiveMetricsView.swift" \
+  "$ROOT_DIR/Sources/MLXLoRAStudio/Views/MCPServerView.swift" \
   "$ROOT_DIR/Sources/MLXLoRAStudio/Views/SharedControls.swift" \
   "$ROOT_DIR/Sources/MLXLoRAStudio/Views/PythonPickerSection.swift" \
   "$ROOT_DIR/Sources/MLXLoRAStudio/Views/HFAssetPicker.swift" \

@@ -18,6 +18,7 @@ final class AppStore {
     var syntheticRunner = PythonJobRunner()
     var hfUploadRunner = PythonJobRunner()
     var packageRunner = PythonJobRunner()
+    var mcpServer = MCPServerController()
     var runs: [RunRecord] = []
     var queuedTrainingRuns: [QueuedTrainingRun] = []
     /// Runs that the runner has written to the output root in previous
@@ -181,6 +182,9 @@ final class AppStore {
         if let saved = defaults.string(forKey: DefaultsKey.selectedPythonPath),
            !saved.isEmpty {
             pythonExecutable = saved
+        }
+        if defaults.string(forKey: "mcpServerPythonExecutable") == nil {
+            mcpServer.pythonExecutable = pythonExecutable
         }
         if let savedCustom = defaults.string(forKey: DefaultsKey.customPythonPath) {
             customPythonPath = savedCustom
@@ -508,7 +512,7 @@ final class AppStore {
             await startSynthetic()
         case .upload:
             await startHFUpload()
-        case .metrics, .guide, .runs, .about:
+        case .metrics, .guide, .runs, .mcp, .about:
             break
         }
     }
@@ -742,7 +746,7 @@ final class AppStore {
             hfUploadRunner
         case .metrics:
             trainingRunner
-        case .guide, .runs, .about:
+        case .guide, .runs, .mcp, .about:
             nil
         }
     }
@@ -759,7 +763,7 @@ final class AppStore {
         switch selection {
         case .train, .synthetic, .upload:
             true
-        case .metrics, .guide, .runs, .about:
+        case .metrics, .guide, .runs, .mcp, .about:
             false
         }
     }

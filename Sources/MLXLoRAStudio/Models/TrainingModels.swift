@@ -8,6 +8,7 @@ enum SidebarSection: String, CaseIterable, Identifiable {
     case upload
     case guide
     case runs
+    case mcp
     case about
 
     var id: String { rawValue }
@@ -20,6 +21,7 @@ enum SidebarSection: String, CaseIterable, Identifiable {
         case .upload: "Upload to HF"
         case .guide: "Algorithm Guide"
         case .runs: "Runs"
+        case .mcp: "MCP Server"
         case .about: "About"
         }
     }
@@ -32,6 +34,7 @@ enum SidebarSection: String, CaseIterable, Identifiable {
         case .upload: "arrow.up.circle"
         case .guide: "book"
         case .runs: "chart.xyaxis.line"
+        case .mcp: "point.3.connected.trianglepath.dotted"
         case .about: "info.circle"
         }
     }
