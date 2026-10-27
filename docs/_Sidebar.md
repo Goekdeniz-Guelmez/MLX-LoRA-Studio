@@ -1,43 +1,45 @@
-**MLX LoRA Studio**
+- [Overview](/)
+- [Choose a training method](Algorithm-Guide)
+- [Open example notebooks](Notebooks)
 
-- [Home](Home)
-
-**Algorithms**
+**Training methods**
 
 - [SFT](SFT)
 - [Dynamic fine-tuning](Dynamic-Fine-Tuning)
 - [DPO](DPO)
-- [DSLA](DSLA)
-- [FTPO](FTPO)
 - [CPO](CPO)
 - [ORPO](ORPO)
+- [DSLA](DSLA)
+- [FTPO](FTPO)
 - [GRPO](GRPO)
 - [KLPO](KLPO)
 - [Online DPO](Online-DPO)
 - [XPO](XPO)
-- [RLHF-REINFORCE](RLHF-Reinforce)
+- [REINFORCE](RLHF-Reinforce)
 - [PPO](PPO)
 
-**Adaptation & foundations**
+**Adaptation and foundations**
 
 - [LoRA](LoRA)
 - [DoRA](DoRA)
-- [Full fine-tuning](Full-Fine-Tuning)
-- [QLoRA](QLoRA)
+- [QLoRA and low-bit loading](QLoRA)
 - [QAT](QAT)
+- [Full fine-tuning](Full-Fine-Tuning)
 - [Optimizers](Optimizers)
 
-**App sections**
+**Inside the app**
 
-- [Train](Train)
-- [Live Metrics](Live-Metrics)
-- [Upload to HF](Upload-to-HF)
-- [Algorithm Guide](Algorithm-Guide)
-- [Runs](Runs)
-- [MCP Server](MCP-Server)
-- [Settings & Onboarding](Settings-and-Onboarding)
+- [Training workflow](Train)
+- [Live metrics](Live-Metrics)
+- [Runs and checkpoints](Runs)
+- [Publish an adapter](Upload-to-HF)
+- [Settings and onboarding](Settings-and-Onboarding)
+- [MCP server and agent tools](MCP-Server)
 
----
+**Project**
 
-- [Repository](https://github.com/Goekdeniz-Guelmez/MLX-LoRA-Studio)
-- [mlx-lm-lora](https://github.com/Goekdeniz-Guelmez/mlx-lm-lora)
+- [Repository and releases](https://github.com/Goekdeniz-Guelmez/MLX-LoRA-Studio)
+- [mlx-lm-lora trainer](https://github.com/Goekdeniz-Guelmez/mlx-lm-lora)
+- [Example notebook collection](https://github.com/Goekdeniz-Guelmez/mlx-lm-lora-example-notebooks)
+- [GitHub profile](https://github.com/Goekdeniz-Guelmez)
+- [Sponsor the project](https://github.com/sponsors/Goekdeniz-Guelmez)
