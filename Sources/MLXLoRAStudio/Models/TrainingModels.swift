@@ -595,6 +595,8 @@ struct TrainingConfig: Equatable {
     var stepsPerEval = 200
     var saveEvery = 100
     var test = false
+    /// Abort as soon as a reported training metric contains NaN or infinity.
+    var stopOnBadMetric = true
     var testBatches = 100
     var maxSeqLength = 2048
     var gradCheckpoint = true
@@ -747,6 +749,7 @@ struct TrainingConfig: Equatable {
             "adapter_path": overrideAdapterPath ?? adapterPath,
             "save_every": saveEvery,
             "test": test,
+            "stop_on_bad_metric": stopOnBadMetric,
             "test_batches": testBatches,
             "max_seq_length": maxSeqLength,
             "grad_checkpoint": gradCheckpoint,
@@ -1405,6 +1408,7 @@ extension TrainingConfig {
 
         // Booleans
         config.test = boolValue(spec["test"]) ?? config.test
+        config.stopOnBadMetric = boolValue(spec["stop_on_bad_metric"]) ?? config.stopOnBadMetric
         config.gradCheckpoint = boolValue(spec["grad_checkpoint"]) ?? config.gradCheckpoint
         config.efficientLongContext = boolValue(spec["efficient_long_context"])
             ?? config.efficientLongContext
