@@ -878,6 +878,24 @@ struct TrainingConfig: Equatable {
     }
 }
 
+/// A point-in-time copy of a training configuration waiting for the runner.
+struct QueuedTrainingRun: Identifiable, Equatable {
+    let id: UUID
+    let config: TrainingConfig
+    let queuedAt: Date
+
+    init(config: TrainingConfig, queuedAt: Date = .now) {
+        self.id = UUID()
+        self.config = config
+        self.queuedAt = queuedAt
+    }
+
+    var title: String {
+        let modelName = config.model.split(separator: "/").last.map(String.init) ?? config.model
+        return "\(modelName) · \(config.trainMode.title) · \(config.trainType.title)"
+    }
+}
+
 struct SyntheticConfig: Equatable {
     static let builtInDatasets = Set(SyntheticKind.allCases.map(\.defaultDataset))
 
